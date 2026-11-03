@@ -1,0 +1,5 @@
+# Reading list: one work id (or author id) per line. Find ids with: python perseus.py find NAME
+tlg0006.tlg012
+tlg0059.tlg002
+tlg0012.tlg001
+phi0474.phi013
