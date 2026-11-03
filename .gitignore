@@ -1,0 +1,6 @@
+# generated: rebuild with python perseus.py update
+corpus/
+site/
+library/perseus/
+__pycache__/
+*.pyc
