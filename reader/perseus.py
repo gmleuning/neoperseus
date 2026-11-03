@@ -2,6 +2,7 @@
 import json
 import re
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -44,7 +45,11 @@ def shelf_works(catalog, entries=None):
 
 
 def short_author(name):
-    """'Cicero, Marcus Tullius' -> 'Cicero'; 'Pliny, the Elder' -> 'Pliny the Elder'."""
+    """'Cicero, Marcus Tullius' -> 'Cicero'; 'Pliny, the Elder' -> 'Pliny the Elder';
+    'Titus Livius (Livy)' -> 'Livy'."""
+    m = re.search(r"\(([^)]+)\)\s*$", name)
+    if m:
+        return m.group(1).strip()
     if "," not in name:
         return name
     head, rest = [x.strip() for x in name.split(",", 1)]
@@ -55,8 +60,31 @@ def local_path(work, ed):
     return CORPUS / work["repo"] / ed["path"]
 
 
+def download(url, dest, tries=4):
+    """Download to a temporary file and rename it into place, so an interrupted download
+    never leaves a half file behind. Retries with a growing pause."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    for attempt in range(1, tries + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
+                while True:
+                    block = r.read(1 << 20)
+                    if not block:
+                        break
+                    f.write(block)
+            tmp.replace(dest)
+            return True
+        except Exception as e:                       # network trouble: wait and retry
+            if attempt == tries:
+                print(f"  could not download {url}: {e}", file=sys.stderr)
+                tmp.unlink(missing_ok=True)
+                return False
+            time.sleep(2 ** attempt)
+
+
 def fetch(catalog, works, force=False):
-    got = 0
+    got, failed = 0, 0
     for w in works:
         src = catalog["sources"][w["repo"]]
         for ed in w["editions"]:
@@ -66,11 +94,13 @@ def fetch(catalog, works, force=False):
             if dest.exists() and not force:
                 continue
             url = f"https://raw.githubusercontent.com/{src['repo']}/{src['commit']}/{ed['path']}"
-            dest.parent.mkdir(parents=True, exist_ok=True)
             print(f"  fetch {w['id']} {ed['id']}")
-            with urllib.request.urlopen(url, timeout=60) as r:
-                dest.write_bytes(r.read())
-            got += 1
+            if download(url, dest):
+                got += 1
+            else:
+                failed += 1
+    if failed:
+        print(f"  {failed} file(s) could not be downloaded; run the same command again to retry them")
     return got
 
 

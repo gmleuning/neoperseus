@@ -90,6 +90,8 @@ def person_from_description(desc, kind):
     (prose translator). Prefers the role that fits the file; falls back to the other."""
     pat = re.compile(r"([A-Z][\w'’\-]+(?: [A-Z][\w'’\-]+)*), ([A-Z][^,;]*?)(?:, [\d?][\d\-–?]*)?,"
                      r" (?:[a-z]+ )?(editor|translator)s?\b")
+    desc = re.sub(r", ([A-Z])\b,", r" \1.,", desc)   # 'Williams, Theodore, C, translator'
+    desc = re.sub(r"([A-Z][\w'’\-]+), ([^,;]+), (Sir|Lord|Rev\.|Mrs\.|Dr\.), ", r"\1, \3 \2, ", desc)  # 'Jebb, Richard, Sir,'
     found = pat.findall(desc)
     want = "translator" if kind == "translation" else "editor"
     names = [(last, first) for last, first, role in found if role == want] or \

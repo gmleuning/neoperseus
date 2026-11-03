@@ -5,6 +5,7 @@
     python perseus.py update                  fetch anything missing, convert, and rebuild the site
     python perseus.py build                   rebuild the site only (after editing your own texts)
     python perseus.py find euripides          search the catalog from the command line
+    python perseus.py dictionaries            download and build LSJ and Lewis & Short (once; about 440 MB)
     python perseus.py import-wikisource FILE.epub --work ID [--lang grc] [--author A] [--title T]
 
 The site is written to site/; open site/index.html.
@@ -37,9 +38,13 @@ def cmd_update(args, force=False):
 def cmd_build(args, catalog=None):
     catalog = catalog or perseus.load_catalog()
     entries, report = builder.build(LIBRARY, SITE, catalog)
-    flagged = [r for r in report if r[5] and r[3] / r[5] < 0.9]
+    flagged = [r for r in report if r[5] and r[3] / r[5] < 0.9 and not r[6]]
+    approx = [r for r in report if r[6]]
     print(f"built {len(entries)} work(s) into {SITE}")
-    for wid, o, t, shared, cand, tk in flagged:
+    if approx:
+        print(f"  {len(approx)} verse translation(s) have their own line numbers and are placed approximately"
+              " (see site/_sync.md)")
+    for wid, o, t, shared, cand, tk, _ in flagged:
         print(f"  check sync: {o} / {t}: {shared} of {tk} translation numbers matched")
     print(f"open {SITE / 'index.html'}")
 
@@ -98,6 +103,13 @@ def cmd_find(args):
             print(f"{w['id']:<22} {author}, {w['title']}  [{langs}]")
 
 
+def cmd_dictionaries(args):
+    from reader import dictionary
+    catalog = perseus.load_catalog()
+    if dictionary.build_all(SITE, catalog):
+        print("dictionaries ready: click any Greek or Latin word in a text")
+
+
 def cmd_import_wikisource(args):
     from reader import wikisource
     out = wikisource.import_epub(Path(args.file), work=args.work, lang=args.lang,
@@ -119,6 +131,7 @@ def main():
     p = sub.add_parser("update"); p.add_argument("--force", action="store_true",
                                                  help="reconvert everything"); p.set_defaults(fn=cmd_update)
     p = sub.add_parser("build"); p.set_defaults(fn=cmd_build)
+    p = sub.add_parser("dictionaries"); p.set_defaults(fn=cmd_dictionaries)
     p = sub.add_parser("find"); p.add_argument("words", nargs="+"); p.set_defaults(fn=cmd_find)
     p = sub.add_parser("import-wikisource")
     p.add_argument("file"); p.add_argument("--work", required=True)
