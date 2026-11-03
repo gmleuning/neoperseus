@@ -161,6 +161,88 @@ def sections_and_groups(chunks):
     return sections
 
 
+# ---- verse translations with their own line numbers ---------------------------------
+def split_key(k):
+    p, _, n = k.rpartition(".")
+    return p, n
+
+
+def verse_lines_by_section(events):
+    """prefix -> sorted line numbers, and the line numbers where a new speaker begins."""
+    nums, turns, after_spk = defaultdict(list), defaultdict(list), False
+    for e in events:
+        if e[0] == "spk":
+            after_spk = True
+        elif e[0] == "line" and e[1]:
+            p, n = split_key(e[1])
+            if n.isdigit():
+                nums[p].append(int(n))
+                if after_spk:
+                    turns[p].append(int(n))
+            after_spk = False
+    return {p: sorted(set(v)) for p, v in nums.items()}, turns
+
+
+def own_lineation(left, right, lmeta, rmeta):
+    """True when a verse translation numbers its own lines (Eclogue 1: 83 Latin lines,
+    101 English), so equal numbers on the two sides do not mean the same line."""
+    if lmeta.get("layout") != "verse" or rmeta.get("layout") != "verse":
+        return False
+    lnums, _ = verse_lines_by_section(left)
+    rnums, _ = verse_lines_by_section(right)
+    common = [p for p in lnums if p in rnums and lnums[p] and rnums[p]]
+    if not common:
+        return False
+    off = sum(1 for p in common if abs(rnums[p][-1] - lnums[p][-1]) > max(3, 0.03 * lnums[p][-1]))
+    return off > len(common) / 3
+
+
+def remap_translation(left, right):
+    """Give each translation line the original's line it most likely renders: anchored at
+    section starts and ends and, when both sides have the same number of speeches, at each
+    change of speaker; proportional in between. The translation keeps showing its own numbers."""
+    lnums, lturns = verse_lines_by_section(left)
+    rnums, rturns = verse_lines_by_section(right)
+    maps = {}
+    for p, rn in rnums.items():
+        ln = lnums.get(p)
+        if not ln:
+            continue
+        anchors = [(rn[0], ln[0])]
+        if len(lturns.get(p, [])) == len(rturns.get(p, [])):
+            anchors += list(zip(rturns[p], lturns[p]))
+        anchors.append((rn[-1], ln[-1]))
+        anchors = sorted(set(anchors))
+        clean = [anchors[0]]
+        for a in anchors[1:]:
+            if a[0] > clean[-1][0] and a[1] >= clean[-1][1]:
+                clean.append(a)
+        maps[p] = (clean, ln)
+
+    def mapped(p, n):
+        anchors, ln = maps[p]
+        xs = [a[0] for a in anchors]
+        i = max(0, min(bisect.bisect_right(xs, n) - 1, len(anchors) - 2)) if len(anchors) > 1 else 0
+        if len(anchors) == 1:
+            target = anchors[0][1]
+        else:
+            (x0, y0), (x1, y1) = anchors[i], anchors[i + 1]
+            target = y0 + (n - x0) * (y1 - y0) / (x1 - x0) if x1 != x0 else y0
+        j = min(bisect.bisect_left(ln, round(target)), len(ln) - 1)
+        return ln[j]
+
+    out = []
+    for e in right:
+        if e[0] == "line" and e[1]:
+            p, n = split_key(e[1])
+            if p in maps and n.isdigit():
+                m = mapped(p, int(n))
+                out.append(("line", f"{p}.{m}" if p else str(m), e[2], e[1]))
+                continue
+        out.append(e)
+    return out
+
+
 # ---- rendering -------------------------------------------------------------------
 class Side:
     def __init__(self, prefix, layout, notes):
@@ -200,10 +282,10 @@ class Side:
             if t == "line":
                 k = e[1]
                 if k:
-                    lp = last_part(k)
-                    num = lp if lp.isdigit() and int(lp) % 5 == 0 else ""
+                    lp = last_part(e[3] if len(e) > 3 else k)     # a translation's own number
+                    cls = "ln n5" if lp.isdigit() and int(lp) % 5 == 0 else "ln"
                     out.append(f'<span class="v" data-k="{html.escape(k)}"{self.anchor(k)}>'
-                               f'<span class="ln">{num}</span>{self.fill_notes(e[2])}</span>')
+                               f'<span class="{cls}">{html.escape(lp)}</span>{self.fill_notes(e[2])}</span>')
                 else:
                     out.append(f'<span class="v">{self.fill_notes(e[2])}</span>')
             elif t == "key":
@@ -257,7 +339,11 @@ def render_page(orig, trans, page_info):
     lmeta, levents, lnotes = orig
     two = trans is not None
     rmeta, revents, rnotes = trans if two else ({}, None, {})
+    approx = two and own_lineation(levents, revents, lmeta, rmeta)
+    if approx:
+        revents = remap_translation(levents, revents)
     chunks, stats = chunk(levents, revents)
+    stats["approx"] = approx
     sections = sections_and_groups(chunks)
     L = Side("L", lmeta.get("layout", "prose"), lnotes)
     R = Side("E", rmeta.get("layout", "prose"), rnotes) if two else None
@@ -301,11 +387,12 @@ def render_page(orig, trans, page_info):
         body.append(f'<section class="sec" id="{sid}">{head}{"".join(groups)}</section>')
 
     has_app = any(k.startswith("a") for k in lnotes)
-    return "".join(body), toc, stats, has_app
+    return "".join(body), toc, stats, has_app, (levents, revents or [])
 
 
 # ---- site --------------------------------------------------------------------------
-def page_html(title, author, work_title, heads, toc, content, has_two, has_app, page_key, depth=1):
+def page_html(title, author, work_title, heads, toc, content, has_two, has_app, page_key, work_id,
+              lang, depth=1):
     up = "../" * depth
     tools = []
     if has_two:
@@ -316,6 +403,10 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
         tools.append('<button type="button" class="tog" id="apptog" aria-pressed="false">Apparatus</button>')
     tools.append('<form class="jump"><label for="jump">Go to</label>'
                  '<input id="jump" autocomplete="off" placeholder="1.150"></form>')
+    tools.append(f'<a class="icon-btn" href="{up}search.html?work={html.escape(work_id)}" '
+                 f'title="Search this text">Search</a>')
+    tools.append('<button type="button" class="icon-btn" data-settings aria-expanded="false" '
+                 'aria-controls="settings" title="Settings (,)">Settings</button>')
     toc_html = (f'<nav class="toc"><details open><summary>Contents</summary><ol>{"".join(toc)}</ol>'
                 f'</details></nav>') if toc else ""
     layout_cls = "layout" if toc else "layout notoc"
@@ -326,9 +417,10 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
+<script src="{up}settings.js"></script>
 <link rel="stylesheet" href="{up}style.css">
 </head>
-<body data-page="{html.escape(page_key)}">
+<body data-page="{html.escape(page_key)}" data-title="{html.escape(work_title)}" data-author="{html.escape(author)}" data-root="{up}" data-lang="{lang}">
 <header class="bar"><a class="home" href="{up}index.html">Library</a>
 <div class="title"><span class="au">{html.escape(author)}</span> <span class="wk">{html.escape(work_title)}</span></div>
 <div class="tools">{"".join(tools)}</div></header>
@@ -337,6 +429,8 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
 {content}
 </main></div>
 <script src="{up}reader.js"></script>
+<script src="{up}shelf.js"></script>
+<script src="{up}dict.js"></script>
 </body>
 </html>
 """
@@ -363,20 +457,87 @@ def collect(lib_dir):
         if not meta.get("work"):
             continue
         meta.setdefault("id", p.stem)
+        meta["own"] = "own" in p.relative_to(lib_dir).parts[:1]
         works[meta["work"]].append((meta, events, notes))
     return works
 
 
+# ---- groups for authors with many works (catalog/groups.tsv) ----------------------
+def load_groups(path):
+    rules = defaultdict(list)
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                rules[parts[0].strip()].append((parts[1].strip(), re.compile(parts[2].strip(), re.I)))
+    return rules
+
+
+def group_of(rules, author_id, title, description):
+    for name, rx in rules.get(author_id, []):
+        target = description if rx.pattern.startswith("desc:") else title
+        pat = rx.pattern[5:] if rx.pattern.startswith("desc:") else None
+        if pat is not None:
+            if re.search(pat, description or "", re.I):
+                return name
+        elif rx.search(title or ""):
+            return name
+    return ""
+
+
+# ---- search data -------------------------------------------------------------------
+TAG = re.compile(r"<sup[^>]*>.*?</sup>|<[^>]+>")
+
+
+def plain(s):
+    return html.unescape(TAG.sub("", s))
+
+
+def segments(events):
+    """[key, text] for each stretch of text after a key; text before any key gets key ''."""
+    out, key, buf = [], "", []
+    for e in events:
+        k = key_of(e)
+        if k:
+            if buf:
+                out.append([key, " ".join(buf)])
+                buf = []
+            key = k
+        if e[0] == "line":
+            buf.append(plain(e[2]))
+        elif e[0] in ("text", "bq"):
+            buf.append(plain(e[1]))
+    if buf:
+        out.append([key, " ".join(buf)])
+    return out
+
+
+def write_search_data(site, wid, author, title, parts):
+    d = site / "search"
+    d.mkdir(exist_ok=True)
+    payload = {"work": wid, "author": author, "title": title, "parts": parts}
+    js = "SearchLoaded(" + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ");\n"
+    (d / f"{slug(wid)}.js").write_text(js, encoding="utf-8")
+
+
 def build(lib_dir, site, catalog=None, shelf_ids=()):
-    if site.exists():                     # start clean so removed works leave no pages behind
-        shutil.rmtree(site)
-    site.mkdir(parents=True)
-    for name in ("style.css", "reader.js", "catalog.js"):
-        shutil.copy(ASSETS / name, site / name)
+    # start clean so removed works leave no pages behind; the dictionary is kept (slow to rebuild)
+    site.mkdir(parents=True, exist_ok=True)
+    for child in site.iterdir():
+        if child.name == "dict":
+            continue
+        shutil.rmtree(child) if child.is_dir() else child.unlink()
+    for name in ("style.css", "settings.js", "reader.js", "dict.js", "index.js", "catalog.js", "search.js"):
+        if (ASSETS / name).exists():
+            shutil.copy(ASSETS / name, site / name)
     shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
 
+    rules = load_groups(ROOT / "catalog" / "groups.tsv")
     works = collect(lib_dir)
     index_entries, report, used = [], [], set()
+    shelf_map = {}
     for wid, docs in sorted(works.items()):
         originals = sorted([d for d in docs if d[0].get("language") in ORIGINAL], key=lambda d: d[0]["id"])
         translations = sorted([d for d in docs if d[0].get("language") not in ORIGINAL], key=lambda d: d[0]["id"])
@@ -384,80 +545,132 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
             originals, translations = translations[:1], translations[1:]
         m0 = originals[0][0]
         author, title = m0.get("author", ""), m0.get("title", wid)
-        base = f"{slug(author)}/{slug(title)}"
-        if base in used:
-            base = f"{slug(author)}/{slug(title)}-{slug(wid)}"
-        used.add(base)
+        base = slug(title)
+        if f"{slug(author)}/{base}" in used:
+            base = f"{slug(title)}-{slug(wid)}"
+        used.add(f"{slug(author)}/{base}")
 
-        combos = [(o, t) for o in originals for t in (translations or [None])]
         hrefs = {}
         for oi, o in enumerate(originals):
             for ti, t in enumerate(translations or [None]):
                 suffix = "" if oi == 0 and ti == 0 else f".{oi}-{ti}"
-                hrefs[(oi, ti)] = f"{slug(title)}{suffix}.html"
+                hrefs[(oi, ti)] = f"{base}{suffix}.html"
+        search_parts = []
         for oi, o in enumerate(originals):
             for ti, t in enumerate(translations or [None]):
-                content, toc, stats, has_app = render_page(o, t, None)
+                content, toc, stats, has_app, final = render_page(o, t, None)
                 href = hrefs[(oi, ti)]
                 lhead = edition_head(o[0], [(x[0], hrefs[(i, ti)]) for i, x in enumerate(originals)],
                                      href, "Original edition")
                 rhead = edition_head(t[0], [(x[0], hrefs[(oi, i)]) for i, x in enumerate(translations)],
                                      href, "Translation") if t else ""
                 page = page_html(f"{title} — {author}", author, title, lhead + rhead, toc, content,
-                                 t is not None, has_app, f"{slug(author)}/{href}")
+                                 t is not None, has_app, f"{slug(author)}/{href}", wid,
+                                 m0.get("language", ""))
                 out = site / slug(author) / href
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(page, encoding="utf-8")
                 if t is not None:
                     tk = sum(1 for e in t[1] if key_of(e))
-                    report.append((wid, o[0]["id"], t[0]["id"], stats["shared"], stats["candidates"], tk))
+                    report.append((wid, o[0]["id"], t[0]["id"], stats["shared"], stats["candidates"], tk,
+                                   stats["approx"]))
+                # search: the first original once, and each translation on its own page
+                page_href = f"{slug(author)}/{href}"
+                if ti == 0:
+                    search_parts.append({"href": page_href, "side": "L", "lang": o[0].get("language", ""),
+                                         "ed": o[0].get("edition") or o[0].get("label", ""),
+                                         "segs": segments(final[0])})
+                if oi == 0 and t is not None:
+                    search_parts.append({"href": page_href, "side": "E", "lang": t[0].get("language", ""),
+                                         "ed": t[0].get("edition") or t[0].get("label", ""),
+                                         "segs": segments(final[1])})
+        write_search_data(site, wid, author, title, search_parts)
+        author_id = wid.split(".")[0] if not m0.get("own") else "own-" + slug(author)
+        desc = m0.get("description", "")
         index_entries.append({
-            "work": wid, "author": author, "title": title,
+            "work": wid, "author": author, "author_id": author_id, "title": title,
             "label": m0.get("label", ""), "href": f"{slug(author)}/{hrefs[(0, 0)]}",
-            "editions": [d[0].get("edition") or d[0].get("label", "") for d in originals],
             "translations": [d[0].get("edition") or d[0].get("label", "") for d in translations],
-            "lang": m0.get("language", ""),
+            "lang": m0.get("language", ""), "own": bool(m0.get("own")),
+            "group": group_of(rules, author_id, title, desc),
+            "search": f"search/{slug(wid)}.js",
         })
+        shelf_map[wid] = f"{slug(author)}/{hrefs[(0, 0)]}"
     write_index(site, index_entries)
     write_catalog(site, catalog, {e["work"] for e in index_entries})
+    write_search_page(site, index_entries)
+    (site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf_map, ensure_ascii=False) + ";\n",
+                                   encoding="utf-8")
     write_report(site, report)
     return index_entries, report
 
 
-def write_index(site, entries):
-    by_author = defaultdict(list)
-    for e in entries:
-        by_author[e["author"]].append(e)
-    blocks = []
-    for author in sorted(by_author, key=lambda a: slug(a)):
-        items = []
-        for e in sorted(by_author[author], key=lambda e: e["work"]):
-            orig = (f'<span class="orig" lang="{"grc" if e["lang"] == "grc" else "la"}">{html.escape(e["label"])}</span>'
-                    if e["label"] and e["label"] != e["title"] else "")
-            trans = ", ".join(t for t in e["translations"] if t)
-            who = f'<span class="who">{html.escape(trans)}</span>' if trans else ""
-            items.append(f'<li data-page="{html.escape(e["href"])}"><a href="{html.escape(e["href"])}">'
-                         f'{html.escape(e["title"])}</a>{orig}{who}<span class="where"></span></li>')
-        blocks.append(f'<section class="au-block"><h2>{html.escape(author)}</h2><ul>{"".join(items)}</ul></section>')
-    n = len(entries)
-    page = f"""<!doctype html>
+def html_page(title, body_cls, main, scripts, data_js=""):
+    return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Library</title>
+<title>{html.escape(title)}</title>
+<script src="settings.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="index">
-<main class="lib"><h1>Library</h1>
-<p class="count">{n} work{"s" if n != 1 else ""} on the shelf · <a href="catalog.html">Catalog of all Perseus texts</a></p>
-{"".join(blocks)}
-</main>
-<script src="reader.js"></script>
+<body class="{body_cls}">
+{main}
+{data_js}
+{"".join(f'<script src="{s}"></script>' for s in scripts)}
 </body>
 </html>
 """
-    (site / "index.html").write_text(page, encoding="utf-8")
+
+
+def top_links(current):
+    links = [("index.html", "Library"), ("search.html", "Search texts"), ("catalog.html", "Catalog")]
+    out = "".join(f'<a href="{h}">{t}</a>' for h, t in links if h != current)
+    return (f'<nav class="links">{out}<button type="button" class="icon-btn" data-settings '
+            f'aria-expanded="false" aria-controls="settings">Settings</button></nav>')
+
+
+def write_index(site, entries):
+    data = json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
+    n = len(entries)
+    main = f"""<main class="lib">
+<div class="lib-top"><h1>Library</h1>{top_links("index.html")}</div>
+<p class="count">{n} work{"s" if n != 1 else ""} on the shelf</p>
+<section id="continue-wrap" hidden><h3 class="label">Continue reading</h3><div class="continue" id="continue"></div></section>
+<div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
+<div class="chips" id="langs" role="group" aria-label="Language">
+<button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button><button type="button" data-l="own" aria-pressed="false">My texts</button></div></div>
+<div class="shelf"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
+<noscript><p>The library list needs JavaScript.</p></noscript>
+</main>"""
+    (site / "index.html").write_text(
+        html_page("Library", "index", main, ["index.js"], f"<script>window.LIBRARY = {data};</script>"),
+        encoding="utf-8")
+
+
+def write_search_page(site, entries):
+    works = [{"work": e["work"], "author": e["author"], "author_id": e["author_id"], "title": e["title"],
+              "lang": e["lang"], "search": e["search"]} for e in entries]
+    data = json.dumps(works, ensure_ascii=False, separators=(",", ":"))
+    main = f"""<main class="lib">
+<div class="lib-top"><h1>Search</h1>{top_links("search.html")}</div>
+<form class="search-form" id="sf">
+<input class="q" id="q" type="search" placeholder="Words or a phrase — accents optional (λογος, arma virumque)" aria-label="Search" autofocus>
+<div class="opts">
+<label>In <select id="scope"></select></label>
+<label>Language <select id="side"><option value="all">Original and translation</option><option value="L">Original only</option><option value="E">Translation only</option></select></label>
+<label><input type="checkbox" id="whole" checked> Whole words</label>
+<label><input type="checkbox" id="forms"> All forms of a Greek word (needs the dictionary)</label>
+</div></form>
+<div class="progress" id="prog" hidden><i></i></div>
+<p class="search-note" id="status">Type a word or phrase and press Enter.</p>
+<div id="results"></div>
+</main>"""
+    (site / "search.html").write_text(
+        html_page("Search", "index search", main, ["search.js", "dict.js"],
+                  f"<script>window.WORKS = {data};</script>"),
+        encoding="utf-8")
 
 
 def write_catalog(site, catalog, on_shelf):
@@ -471,16 +684,8 @@ def write_catalog(site, catalog, on_shelf):
         rows.append([w["id"], catalog["authors"].get(w["author"], w["author"]), w["title"], orig,
                      "+".join(langs), len(trans), 1 if w["id"] in on_shelf else 0])
     data = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
-    page = f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Catalog</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body class="index">
-<main class="lib wide"><h1>Catalog</h1>
+    main = f"""<main class="lib wide">
+<div class="lib-top"><h1>Catalog</h1>{top_links("catalog.html")}</div>
 <p class="count">Every work in the Perseus canonical Greek and Latin repositories. To add one to your shelf, run the
 command shown next to it.</p>
 <div class="filters"><input id="q" type="search" placeholder="Search author or title (accents optional)" autofocus>
@@ -489,12 +694,8 @@ command shown next to it.</p>
 <p class="count" id="n"></p>
 <table class="cat"><thead><tr><th>Author</th><th>Title</th><th>Languages</th><th>To add</th></tr></thead>
 <tbody id="rows"></tbody></table>
-</main>
-<script>window.CATALOG = {data};</script>
-<script src="catalog.js"></script>
-</body>
-</html>
-"""
+</main>"""
+    page = html_page("Catalog", "index", main, ["catalog.js"], f"<script>window.CATALOG = {data};</script>")
     (site / "catalog.html").write_text(page, encoding="utf-8")
 
 
@@ -502,10 +703,12 @@ def write_report(site, report):
     lines = ["# Sync report", "",
              "Shared = numbers found on both sides, in an order both sides agree on.",
              "Coverage = shared / numbers in the translation. Below 90% is flagged.", "",
+             "Approximate = a verse translation with its own line numbers, placed against the original",
+             "proportionally between section starts and changes of speaker.", "",
              "| work | original | translation | shared | translation numbers | coverage | |",
              "|---|---|---|---|---|---|---|"]
-    for wid, o, t, shared, cand, tk in report:
+    for wid, o, t, shared, cand, tk, approx in report:
         cov = shared / tk if tk else 0
-        flag = "" if cov >= 0.9 else "CHECK"
+        flag = "approximate" if approx else ("" if cov >= 0.9 else "CHECK")
         lines.append(f"| {wid} | {o} | {t} | {shared} | {tk} | {cov:.0%} | {flag} |")
     (site / "_sync.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -1,0 +1,18 @@
+# Groups for authors with many works, shown as headings on the library page.
+# One rule per line, separated by TABS: author id, group name, pattern.
+# The pattern is a regular expression matched against the work's title (case ignored);
+# start it with desc: to match the edition description instead. First matching rule wins;
+# works that match no rule are listed under "Other works". Edit freely, then run: python perseus.py build
+tlg0007	Lives	desc:Lives|Vitae|Perrin
+tlg0007	Moralia	.
+phi0474	Speeches	^(Pro |In |Divinatio|De Imperio|De Lege Agraria|Cum |De Domo|De Haruspicum|Against|De Provinciis|Philippicae)
+phi0474	Rhetoric	(Inventione|Oratory|Oratore|Partitiones|Brutus|^Orator$|Optimo Genere|Topica)
+phi0474	Letters	^Letters|Epistulae
+phi0474	Philosophy	.
+phi1017	Tragedies	(Furens|Troades|Phoenissae|Medea|Phaedra|Oedipus|Agamemnon|Thyestes|Oetaeus|Octavia)
+phi1017	Letters	Epistulae|Letters
+phi1017	Dialogues and essays	.
+tlg0014	Assembly speeches	(Olynthiac|Philippic|On the Peace|On Halonnesus|On the Chersonese|Philip’s Letter|On Organization|Navy-Boards|Rhodians|Megalopolis|Treaty with Alexander)
+tlg0014	Public trials	^(On the Crown|On the False Embassy|Against (Leptines|Meidias|Androtion|Aristocrates|Timocrates|Aristogeiton))
+tlg0014	Private speeches	(Against|For Phormio|Trierarchic)
+tlg0014	Other works	.
