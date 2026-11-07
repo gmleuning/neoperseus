@@ -4,3 +4,5 @@ site/
 library/perseus/
 __pycache__/
 *.pyc
+# wrangler (Cloudflare deploy) cache
+.wrangler/

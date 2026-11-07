@@ -56,6 +56,35 @@ the right word for most regular forms but can rank a lookalike first (`venit` of
 before *venio*) and misses some irregular forms. The panel always lists the other candidates
 and has a box for typing a dictionary form.
 
+## Publishing online (Cloudflare Pages)
+
+The built reader is about 600 MB, too big to commit to git, so it is uploaded straight to
+[Cloudflare Pages](https://pages.cloudflare.com/) (free plan: unlimited bandwidth, up to 20,000 files
+and 25 MB per file). It needs [Node.js](https://nodejs.org/) and a free Cloudflare account.
+
+First time only, log in (a browser window opens to approve access):
+
+```powershell
+npx wrangler login
+```
+
+Then, from this folder:
+
+```powershell
+.\deploy.ps1            # upload site/ as it is
+.\deploy.ps1 -Build     # rebuild first (after editing your own texts)
+.\deploy.ps1 -Update    # re-run everything for the shelf, then upload
+.\deploy.ps1 -Check     # only check site/ against Cloudflare's limits
+```
+
+The first deploy creates the project and uploads everything; later deploys upload only
+changed files. The reader is then at `https://perseusrebuild.pages.dev` (Cloudflare prints the
+exact address; `-Project othername` picks another name).
+
+The Greek word-form data is **CC BY-NC**, so the published site must stay non-commercial: no
+ads, no charging for access. Keep copyrighted texts (for example modern translations converted
+from PDFs) out of `library/own/` if you publish.
+
 ## Your own texts
 
 Any Markdown file in `library/own/` that follows [SPEC.md](SPEC.md) is part of the library.
@@ -85,6 +114,8 @@ assets/               style.css, settings.js, reader.js, dict.js, index.js, sear
 catalog/catalog.json  every Perseus work and file (regenerate with tools/make_catalog.py)
 catalog/groups.tsv    how authors with many works are grouped on the library page
 shelf.txt             your reading list
+deploy.ps1            publishes site/ to Cloudflare Pages
+pdf2md.ps1            PDF -> Markdown with line markings kept (pdftotext)
 library/own/          your texts (committed)
 library/perseus/      converted Perseus texts (generated, not committed)
 corpus/               downloaded Perseus XML (generated, not committed)
