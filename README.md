@@ -115,7 +115,6 @@ catalog/catalog.json  every Perseus work and file (regenerate with tools/make_ca
 catalog/groups.tsv    how authors with many works are grouped on the library page
 shelf.txt             your reading list
 deploy.ps1            publishes site/ to Cloudflare Pages
-pdf2md.ps1            PDF -> Markdown with line markings kept (pdftotext)
 library/own/          your texts (committed)
 library/perseus/      converted Perseus texts (generated, not committed)
 corpus/               downloaded Perseus XML (generated, not committed)

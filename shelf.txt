@@ -3,3 +3,14 @@ tlg0006.tlg012
 tlg0059.tlg002
 tlg0012.tlg001
 phi0474.phi013
+tlg0007
+tlg0003
+tlg0031
+tlg0557
+phi0474
+phi0448
+phi1348
+phi1351
+stoa0255
+stoa0275
+tlg2003
