@@ -22,7 +22,7 @@ param(
     [switch]$Build,
     [switch]$Update,
     [switch]$Check,
-    [string]$Project = 'perseusrebuild'
+    [string]$Project = 'neoperseus'
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot

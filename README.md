@@ -4,7 +4,7 @@ A fast, static, personal reader for Greek and Latin texts side by side with Engl
 from the Perseus Digital Library's own source files, plus any texts you add yourself.
 Plain HTML, no server, works offline.
 
-**Read it online: https://perseusrebuild.pages.dev**
+**Read it online: https://neoperseus.pages.dev**
 
 This repository holds the code that builds the reader, plus the reading list (`shelf.txt`) and
 your own texts. The Perseus texts and the dictionaries are not stored here (they come to about
@@ -85,7 +85,7 @@ Then, from this folder:
 ```
 
 The first deploy creates the project and uploads everything; later deploys upload only
-changed files. The reader is then at `https://perseusrebuild.pages.dev` (Cloudflare prints the
+changed files. The reader is then at `https://neoperseus.pages.dev` (Cloudflare prints the
 exact address; `-Project othername` picks another name).
 
 The Greek word-form data is **CC BY-NC**, so the published site must stay non-commercial: no
