@@ -4,6 +4,13 @@ A fast, static, personal reader for Greek and Latin texts side by side with Engl
 from the Perseus Digital Library's own source files, plus any texts you add yourself.
 Plain HTML, no server, works offline.
 
+**Read it online: https://perseusrebuild.pages.dev**
+
+This repository holds the code that builds the reader, plus the reading list (`shelf.txt`) and
+your own texts. The Perseus texts and the dictionaries are not stored here (they come to about
+1.3 GB); `perseus.py` downloads them from the Perseus repositories when you build. The
+finished site is hosted on Cloudflare Pages (see *Publishing online* below).
+
 ## Setup
 
 Python 3.9 or later and lxml:
