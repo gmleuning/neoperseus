@@ -1,4 +1,4 @@
-# perseusrebuild
+# neoperseus
 
 A fast, static, personal reader for Greek and Latin texts side by side with English, built
 from the Perseus Digital Library's own source files, plus any texts you add yourself.
