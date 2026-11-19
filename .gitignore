@@ -8,3 +8,13 @@ __pycache__/
 .wrangler/
 # texts that may not be published (python perseus.py build --private reads them)
 library/private/
+# imported books and working copies (in copyright or not yet sorted): never commit
+library/additions/
+library/preowned/
+# source scans of the Turner painting (218 MB); the site uses beacon.jpg and beacon-tall.jpg
+assets/JMW Turner*
+assets/Turner Beacon Light.png
+# commercial font (Pangram Pangram), not redistributable in a public repo
+assets/fonts/PPEditorialNew-*
+# local tool settings
+.claude/

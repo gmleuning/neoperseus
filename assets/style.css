@@ -19,6 +19,8 @@
 
 /* Hershey Greek Simplex, for the landing-page title (made by tools/hershey_greek.py) */
 @font-face { font-family: "Hershey Greek Simplex"; font-display: block; src: url(fonts/HersheyGreekSimplex.ttf) format("truetype"); }
+/* PP Editorial New (Pangram Pangram), for the landing-page English title */
+@font-face { font-family: "PP Editorial New"; font-weight: 400; font-display: block; src: url(fonts/PPEditorialNew-Regular.otf) format("opentype"); }
 
 /* ---- tokens --------------------------------------------------------- */
 :root {
@@ -439,17 +441,17 @@ body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
 .landing .art { position: absolute; inset: 0; }
 .landing .art img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: 50% 49%; }
 .landing .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,8,8,.45) 0%, rgba(10,8,8,0) 22%); }
-.landing .land-top { position: relative; display: flex; gap: 1.4rem; justify-content: flex-end; align-items: baseline; padding: 1.1rem 1.6rem; font-size: .92rem; }
+.landing .land-top { position: relative; display: flex; gap: 1.4rem; justify-content: flex-end; align-items: baseline; flex-wrap: wrap; padding: 1.1rem 1.6rem; font-size: .92rem; }
 .landing .land-top a { color: #e9dfd6; text-decoration: none; }
 .landing .land-top a:hover { color: var(--accent); }
 .landing .land-top .icon-btn { color: #e9dfd6; border-color: rgba(255,255,255,.3); background: rgba(0,0,0,.25); }
-.landing .hero { position: relative; margin: auto 0 0; padding: 0 1.6rem 3.2rem; max-width: 46rem; margin-left: clamp(0rem, 6vw, 6rem); }
+.landing .hero { position: relative; margin: auto auto 0; padding: 0 1.6rem 3.4rem; max-width: 100%; text-align: center; }
 .landing h1, .landing h1 span { font-family: "Hershey Greek Simplex", var(--gk); }
 .landing h1 { font-weight: 400; line-height: 1; margin: .5rem 0 0; white-space: nowrap; }
 .landing h1 span, .landing .sub span { display: inline-block; }
-.landing .sub { font-style: normal; font-size: clamp(1.1rem, 2.6vw, 2rem); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: 0; white-space: nowrap; }
+.landing .sub { font-family: "PP Editorial New", var(--en); font-style: normal; font-size: clamp(1.1rem, 2.6vw, 2rem); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: 0; white-space: nowrap; }
 .landing .sub span { margin-right: -.18em; }
-.landing .land-foot { position: relative; padding: 0 1.6rem 1rem; color: #fff; font-size: .75rem; }
+.landing .land-credit { margin-right: auto; color: #e9dfd6; font-size: .8rem; opacity: .85; }
 @media (max-width: 520px) {
   .landing .land-top { gap: .9rem; padding: .9rem 1rem; font-size: .85rem; }
   .landing .hero { padding: 0 1rem 2.4rem; }

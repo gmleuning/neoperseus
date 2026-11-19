@@ -867,13 +867,12 @@ def write_landing(site, entries):
     main = """<main class="landing">
 <div class="art" aria-hidden="true"><picture><source media="(orientation: portrait)" srcset="beacon-tall.jpg"><img src="beacon.jpg" alt=""></picture></div>
 <div class="veil" aria-hidden="true"></div>
-<nav class="land-top"><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
+<nav class="land-top"><span class="land-credit">J. M. W. Turner, <i>The Beacon Light</i></span><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
 <button type="button" class="icon-btn" data-settings aria-expanded="false" aria-controls="settings">Settings</button></nav>
 <section class="hero">
 <p class="sub"><span>The Mandate of Fire</span></p>
 <h1 lang="grc" title="Θεσμὸς Πυρός"><span>ΘΕΣΜΟΣ ΠΥΡΟΣ</span></h1>
 </section>
-<footer class="land-foot">J. M. W. Turner, <i>The Beacon Light</i></footer>
 </main>"""
     (site / "index.html").write_text(
         html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], LANDING_FIT), encoding="utf-8")
