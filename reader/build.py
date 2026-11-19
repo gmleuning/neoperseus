@@ -359,6 +359,34 @@ def last_key(events):
     return None
 
 
+CAST_TITLES = ("characters", "cast", "dramatis personae", "persons of the drama", "persons of the play")
+
+
+def front_html(side, meta, cls, lang):
+    """A side's ::: blocks: each folded under its title; a cast list is open and compact."""
+    parts = []
+    for i, (title, paras) in enumerate(meta.get("_front", []), 1):
+        cast = re.sub(r"<[^>]+>", "", title).strip().lower() in CAST_TITLES
+        body = "".join(f"<p>{side.fill_notes(p)}</p>" for p in paras)
+        parts.append(f'<details class="fm{" cast" if cast else ""}" id="{side.prefix}fm{i}"'
+                     f'{" open" if cast else ""}><summary>{title}</summary>{body}{side.notes_html(1)}</details>')
+    return f'<div class="col {cls}" lang="{lang}">{"".join(parts)}</div>'
+
+
+def front_section(cols, toc, three=False):
+    """The block above the text, and its contents entries; cols: [(side, meta, cls, lang)]."""
+    if not any(m.get("_front") for _, m, _, _ in cols):
+        return ""
+    for side, m, _, _ in cols:
+        who = (m.get("edition") or "").split()
+        for i, (title, _) in enumerate(m.get("_front", []), 1):
+            toc.append(f'<li class="fm"><a href="#{side.prefix}fm{i}"><span class="t">{title}</span>'
+                       f'<span class="r">{html.escape(who[-1] if who else "")}</span></a></li>')
+    inner = "".join(front_html(s, m, c, l) for s, m, c, l in cols)
+    kind = " three" if three else (" single" if len(cols) == 1 else "")
+    return f'<section class="front"><div class="grp{kind}">{inner}</div></section>'
+
+
 def render_page(orig, trans, page_info):
     lmeta, levents, lnotes = orig
     two = trans is not None
@@ -373,6 +401,10 @@ def render_page(orig, trans, page_info):
     R = Side("E", rmeta.get("layout", "prose"), rnotes) if two else None
 
     body, toc = [], []
+    cols = [(L, lmeta, f"g {L.layout}", HTML_LANG.get(lmeta.get("language"), "en"))]
+    if two:
+        cols.append((R, rmeta, f"e {R.layout}", HTML_LANG.get(rmeta.get("language"), "en")))
+    body.append(front_section(cols, toc))
     for si, sec in enumerate(sections, 1):
         all_left = [e for g in sec["groups"] for lch, _ in g for e in lch]
         k0, k1 = first_key(all_left), last_key(all_left)
@@ -441,6 +473,9 @@ def render_compare(orig, ta, tb):
         return HTML_LANG.get(m.get("language"), "en")
 
     body, toc = [], []
+    body.append(front_section([(A, sides[0][0], f"e {A.layout}", lang(sides[0][0])),
+                               (L, lmeta, f"g {L.layout}", lang(lmeta)),
+                               (B, sides[1][0], f"e f {B.layout}", lang(sides[1][0]))], toc, three=True))
     for si, sec in enumerate(sections, 1):
         all_left = [e for g in sec["groups"] for ch in g for e in ch[0]]
         k0, k1 = first_key(all_left), last_key(all_left)

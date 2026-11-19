@@ -107,6 +107,13 @@ def convert(text, meta):
     def prose(s):
         out.extend(["", "¶ " + unescape(s), ""])
 
+    def to_play():
+        """Leaving the introduction or cast list: close its ::: block."""
+        nonlocal phase
+        if phase in ("intro", "cast"):
+            out.extend(["", ":::", ""])
+        phase = "play"
+
     def flush():
         nonlocal para, phase
         if not para:
@@ -128,7 +135,7 @@ def convert(text, meta):
         if phase == "front":
             if p.upper().startswith("INTRODUCTION"):
                 phase = "intro"
-                out.extend(["### Introduction", ""])
+                out.extend(["::: Introduction", ""])
             elif p.lower().startswith("translated by") and not meta.get("edition"):
                 meta["edition"] = p[len("translated by"):].strip()
             return
@@ -136,7 +143,7 @@ def convert(text, meta):
             if p.lower() == "characters" or fold(p).upper() == title_caps:
                 if p.lower() == "characters":
                     phase = "cast"
-                    out.extend(["", "### Characters", ""])
+                    out.extend(["", ":::", "", "::: Characters", ""])
                 return
             prose(p)
             return
@@ -145,7 +152,7 @@ def convert(text, meta):
                 return
             prose(p)
             if p.lower().startswith("scene"):
-                phase = "play"
+                to_play()
             return
         # the play
         if re.fullmatch(r"\(.*\)", p, re.S) or re.fullmatch(r"\[.*\]", p, re.S):
@@ -167,7 +174,7 @@ def convert(text, meta):
                 out.append("")            # end of a table: end of a stanza
             in_table = not in_table
             if phase in ("intro", "cast"):
-                phase = "play"
+                to_play()
             continue
         if in_table:
             if not raw.strip():
@@ -186,13 +193,13 @@ def convert(text, meta):
             flush()
             marker = ("verse", None)
             if phase in ("intro", "cast"):
-                phase = "play"
+                to_play()
             continue
         if phase not in ("notes", "front") and NUMBER_LINE.match(raw) and not para:
             flush()
             marker = ("verse", int(NUMBER_LINE.match(raw).group(1)))
             if phase in ("intro", "cast"):
-                phase = "play"
+                to_play()
             continue
         if marker:
             flush()

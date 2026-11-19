@@ -35,8 +35,21 @@ def parse(path, edits=None):
     layout = meta.get("layout", "prose")
     numbering = meta.get("numbering", "explicit")
 
-    notes, lines = {}, []
+    notes, lines, front, fblock = {}, [], [], None
     for line in body.splitlines():
+        s = line.strip()
+        if s.startswith(":::"):
+            # ::: Introduction ... ::: : material before the text (preface, introduction,
+            # cast list), shown above it and not aligned with the other side
+            if fblock is None:
+                fblock = (s[3:].strip() or "Introduction", [])
+                front.append(fblock)
+            else:
+                fblock = None
+            continue
+        if fblock is not None and not NOTE_DEF.match(line):
+            fblock[1].append(line)
+            continue
         m = NOTE_DEF.match(line)
         if m:
             notes[m.group(1)] = inline(m.group(2))
@@ -119,4 +132,23 @@ def parse(path, edits=None):
         else:
             para.append(unescape_start(s))
     flush()
+    meta["_front"] = [(inline(t), front_paragraphs(ls)) for t, ls in front]
     return meta, events, notes
+
+
+def front_paragraphs(lines):
+    """Paragraphs of a ::: block: blank lines separate them, a ¶ line is one on its own."""
+    out, cur = [], []
+    for line in lines + [""]:
+        s = line.strip()
+        if s.startswith("¶ "):
+            if cur:
+                out.append(" ".join(cur))
+                cur = []
+            out.append(unescape_start(s[2:].strip()))
+        elif s:
+            cur.append(unescape_start(s))
+        elif cur:
+            out.append(" ".join(cur))
+            cur = []
+    return [inline(p) for p in out]

@@ -43,6 +43,7 @@ use that work's id and it pairs with the Perseus original automatically.
 | `*word*` | italics |
 | `text[^3]` … `[^3]: note` | a note; ids starting with `a` (`[^a12]`) are critical apparatus, hidden until the Apparatus button is on |
 | `\#`, `\>`, `\**` at line start | literal characters, not markup |
+| `::: Introduction` … `:::` | material before the text (preface, introduction, cast list): shown above it, folded under its title, listed in the contents, never aligned with the other side; a block titled `Characters` (or `Cast`, `Dramatis personae`) is shown open as a cast list |
 
 **Verse** (`layout: verse`): one line per line; a blank line is a stanza break.
 - `numbering: explicit`: a line is numbered only if it starts with `{{n}}`.

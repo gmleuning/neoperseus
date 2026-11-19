@@ -95,9 +95,15 @@
     raw = raw.normalize("NFC").replace(/^﻿/, "");
     var fm = frontMatter(raw), meta = withDefaults(fm.meta, name);
     var layout = meta.layout || "prose", numbering = meta.numbering || "explicit";
-    var notes = {}, lines = [];
+    var notes = {}, lines = [], front = [], fblock = null;
     splitLines(fm.body).forEach(function (line) {
-      var m = /^\[\^([^\]]+)\]:\s*(.*)$/.exec(line);
+      var m = /^\[\^([^\]]+)\]:\s*(.*)$/.exec(line), st = line.trim();
+      if (st.slice(0, 3) === ":::") {         // ::: Title ... ::: front matter (see reader/library.py)
+        if (!fblock) { fblock = [st.slice(3).trim() || "Introduction", []]; front.push(fblock); }
+        else fblock = null;
+        return;
+      }
+      if (fblock && !m) { fblock[1].push(line); return; }
       if (m) notes[m[1]] = inline(m[2]);
       else lines.push(line.replace(/\s+$/, ""));
     });
@@ -150,7 +156,20 @@
       } else para.push(unescapeStart(s));
     });
     flush();
+    meta._front = front.map(function (b) { return [inline(b[0]), frontParagraphs(b[1])]; });
     return { meta: meta, events: events, notes: notes };
+  }
+  function frontParagraphs(lines) {
+    var out = [], cur = [];
+    lines.concat([""]).forEach(function (line) {
+      var s = line.trim();
+      if (s.slice(0, 2) === "¶ ") {
+        if (cur.length) { out.push(cur.join(" ")); cur = []; }
+        out.push(unescapeStart(s.slice(2).trim()));
+      } else if (s) cur.push(unescapeStart(s));
+      else if (cur.length) { out.push(cur.join(" ")); cur = []; }
+    });
+    return out.map(inline);
   }
 
   // ---- alignment and rendering (port of reader/build.py) ---------------------------------
@@ -380,6 +399,28 @@
   function firstKey(evs) { for (var i = 0; i < evs.length; i++) { var k = keyOf(evs[i]); if (k) return k; } return null; }
   function lastKey(evs) { for (var i = evs.length - 1; i >= 0; i--) { var k = keyOf(evs[i]); if (k) return k; } return null; }
 
+  var CAST_TITLES = ["characters", "cast", "dramatis personae", "persons of the drama", "persons of the play"];
+  function frontHtml(side, meta, cls, lang) {
+    return '<div class="col ' + cls + '" lang="' + lang + '">' + (meta._front || []).map(function (f, i) {
+      var cast = CAST_TITLES.indexOf(f[0].replace(/<[^>]+>/g, "").trim().toLowerCase()) >= 0;
+      var body = f[1].map(function (p) { return "<p>" + side.fillNotes(p) + "</p>"; }).join("");
+      return '<details class="fm' + (cast ? " cast" : "") + '" id="' + side.prefix + "fm" + (i + 1) + '"' + (cast ? " open" : "") +
+        "><summary>" + f[0] + "</summary>" + body + side.notesHtml(1) + "</details>";
+    }).join("") + "</div>";
+  }
+  function frontSection(cols, toc) {
+    if (!cols.some(function (c) { return (c[1]._front || []).length; })) return "";
+    cols.forEach(function (c) {
+      var who = (c[1].edition || "").split(/\s+/).filter(Boolean);
+      (c[1]._front || []).forEach(function (f, i) {
+        toc.push('<li class="fm"><a href="#' + c[0].prefix + "fm" + (i + 1) + '"><span class="t">' + f[0] +
+          '</span><span class="r">' + esc(who.length ? who[who.length - 1] : "") + "</span></a></li>");
+      });
+    });
+    return '<section class="front"><div class="grp' + (cols.length === 1 ? " single" : "") + '">' +
+      cols.map(function (c) { return frontHtml(c[0], c[1], c[2], c[3]); }).join("") + "</div></section>";
+  }
+
   function renderPage(orig, trans) {
     var two = !!trans, levents = orig.events, revents = two ? trans.events : null;
     if (two && ownLineation(levents, revents, orig.meta, trans.meta)) revents = remapTranslation(levents, revents);
@@ -388,6 +429,9 @@
     var R = two ? new Side("E", trans.meta.layout || "prose", trans.notes) : null;
     var llang = HTML_LANG[orig.meta.language] || "en", rlang = two ? (HTML_LANG[trans.meta.language] || "en") : "en";
     var body = [], toc = [];
+    var fcols = [[L, orig.meta, "g " + L.layout, llang]];
+    if (two) fcols.push([R, trans.meta, "e " + R.layout, rlang]);
+    body.push(frontSection(fcols, toc));
     sections.forEach(function (sec, si) {
       var all = [];
       sec.groups.forEach(function (g) { g.forEach(function (c) { all = all.concat(c[0]); }); });

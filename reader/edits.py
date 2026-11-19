@@ -58,6 +58,7 @@ def segments(raw):
     verse = meta.get("layout", "prose") == "verse"
     lines = raw.split("\n")
     out, cur, texts = [], [], []
+    in_front = False
 
     def close():
         if cur:
@@ -69,7 +70,10 @@ def segments(raw):
         s = lines[i].strip()
         if NOTE_DEF.match(s):
             continue
-        if not s:
+        if s.startswith(":::"):
+            close()
+            in_front = not in_front
+        elif not s:
             close()
         elif (s.startswith("## ") or s.startswith("### ") or re.fullmatch(r"\*\*[^*]+\*\*", s)
               or re.fullmatch(r"\*\(.*\)\*", s) or s == "{{gap}}"):
@@ -80,7 +84,7 @@ def segments(raw):
         elif s.startswith("> "):
             cur.append(i)
             texts.append(s[2:])
-        elif verse and s.startswith("¶ "):
+        elif (verse or in_front) and s.startswith("¶ "):
             close()
             out.append(([i], plain(s[2:])))
         else:

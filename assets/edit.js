@@ -58,7 +58,7 @@
         if (n.nodeType !== 1) continue;
         if (n.matches(SKIP)) continue;
         if (n.matches(BOUNDARY)) { out.push({ b: true }); continue; }
-        if (n.matches(".bq")) { out.push({ b: true }); walk(n); out.push({ b: true }); continue; }
+        if (n.matches(".bq, p")) { out.push({ b: true }); walk(n); out.push({ b: true }); continue; }
         if (n.matches(".v")) out.push({ v: true });
         walk(n);
       }

@@ -456,3 +456,15 @@ body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
   .landing .sub { letter-spacing: .12em; }
   .landing .sub span { margin-right: -.12em; }
 }
+
+/* front matter (::: blocks): introduction, preface, cast list above the text, not aligned */
+.front { padding: .2rem 0 1rem; border-bottom: 1px solid var(--faint); margin-bottom: 1rem; }
+body.tight .front .col, .front .col { display: block; }
+.front .fm { margin: .1rem 0 .5rem; }
+.front .fm summary { cursor: pointer; color: var(--muted); font-style: italic; font-size: .92rem; }
+.front .fm summary:hover { color: var(--accent); }
+.front .fm[open] > summary { margin-bottom: .4rem; }
+.front .fm p { margin: 0 0 .7rem; }
+.front .fm .notes { position: static; margin-top: .4rem; }
+.front .fm.cast p { margin: 0 0 .15rem; padding-left: 1.2em; text-indent: -1.2em; }
+.toc li.fm a .t { font-style: italic; }

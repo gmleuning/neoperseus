@@ -53,6 +53,7 @@ def cmd_build(args, catalog=None):
     for wid, o, t, shared, cand, tk, _ in flagged:
         print(f"  check sync: {o} / {t}: {shared} of {tk} translation numbers matched")
     print(f"open {SITE / 'index.html'}")
+    print("to edit or import texts: python perseus.py edit  (then http://127.0.0.1:8790/)")
 
 
 def edit_shelf(add=(), remove=()):
