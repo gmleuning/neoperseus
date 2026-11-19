@@ -794,6 +794,23 @@ def write_local_page(site):
     (site / "local.html").write_text(page, encoding="utf-8")
 
 
+# the Greek title is sized so that it spans exactly the width of "The Mandate of Fire"
+LANDING_FIT = """<script>
+(function () {
+  var sub = document.querySelector(".landing .sub span"), h = document.querySelector(".landing h1");
+  var g = h.querySelector("span");
+  function fit() {
+    h.style.fontSize = "100px";
+    var w = g.getBoundingClientRect().width, target = sub.getBoundingClientRect().width;
+    if (w) h.style.fontSize = (100 * target / w) + "px";
+  }
+  fit();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  window.addEventListener("resize", fit);
+})();
+</script>"""
+
+
 def write_landing(site, entries):
     main = """<main class="landing">
 <div class="art" aria-hidden="true"><picture><source media="(orientation: portrait)" srcset="beacon-tall.jpg"><img src="beacon.jpg" alt=""></picture></div>
@@ -801,13 +818,13 @@ def write_landing(site, entries):
 <nav class="land-top"><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
 <button type="button" class="icon-btn" data-settings aria-expanded="false" aria-controls="settings">Settings</button></nav>
 <section class="hero">
-<h1 lang="grc">Θεσμὸς Πυρός</h1>
-<p class="sub">The Mandate of Fire</p>
+<p class="sub"><span>The Mandate of Fire</span></p>
+<h1 lang="grc" title="Θεσμὸς Πυρός"><span>ΘΕΣΜΟΣ ΠΥΡΟΣ</span></h1>
 </section>
-<footer class="land-foot">Painting: J. M. W. Turner, <i>The Beacon Light</i>.</footer>
+<footer class="land-foot">J. M. W. Turner, <i>The Beacon Light</i></footer>
 </main>"""
     (site / "index.html").write_text(
-        html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], ""), encoding="utf-8")
+        html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], LANDING_FIT), encoding="utf-8")
 
 
 def write_search_page(site, entries):
