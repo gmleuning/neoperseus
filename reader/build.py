@@ -804,7 +804,7 @@ def write_landing(site, entries):
 <h1 lang="grc">Θεσμὸς Πυρός</h1>
 <p class="sub">The Mandate of Fire</p>
 </section>
-<footer class="land-foot">Painting: J. M. W. Turner, <i>Seascape with Storm Coming On</i>.</footer>
+<footer class="land-foot">Painting: J. M. W. Turner, <i>The Beacon Light</i>.</footer>
 </main>"""
     (site / "index.html").write_text(
         html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], ""), encoding="utf-8")
