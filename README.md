@@ -116,20 +116,39 @@ To pair a translation with an original, give both files the same `work:` id and 
 citation keys. A translation of a Perseus work takes that work's id (for example
 `phi1276.phi001` for Juvenal's Satires) and pairs with the Perseus Latin automatically.
 
+## Editing texts
+
+```powershell
+python perseus.py edit       # opens the reader at http://127.0.0.1:8790 with editing switched on
+```
+
+In edit mode, Alt-click a paragraph (or a stanza of verse) and choose **Delete paragraph**. The
+edit bar in the corner lists the edits on the page (each can be undone), **Rebuild** shows them
+here, and **Publish** rebuilds, commits `library/edits.tsv`, pushes to GitHub and deploys to
+Cloudflare Pages (`python perseus.py publish` does the same from the terminal).
+
+Edits are rules in `library/edits.tsv`, not changes to the text files: the converted Perseus
+texts are regenerated from the Perseus sources, and a rule finds its paragraph by its opening
+words, so it survives re-conversion. A rule whose paragraph is no longer found is reported by
+`build`. The editing tools are added to pages only by the local edit server; the built site,
+and so the public one, does not contain them.
+
 ## Layout
 
 ```
 perseus.py            the command
 reader/               tei.py (Perseus XML -> library), wikisource.py (EPUB -> library),
                       library.py (reads library files), build.py (library -> site),
+                      edits.py (edit rules), editserver.py (python perseus.py edit),
                       perseus.py (catalog, shelf, download), dictionary.py (LSJ, Lewis & Short)
-assets/               style.css, settings.js, reader.js, dict.js, index.js, search.js,
-                      catalog.js, fonts/
+assets/               style.css, settings.js, reader.js, dict.js, library.js, local.js,
+                      search.js, catalog.js, edit.js (edit mode only), fonts/
 catalog/catalog.json  every Perseus work and file (regenerate with tools/make_catalog.py)
 catalog/groups.tsv    how authors with many works are grouped on the library page
 shelf.txt             your reading list
 deploy.ps1            publishes site/ to Cloudflare Pages
 library/own/          your texts (committed)
+library/edits.tsv     text edits made in edit mode (committed)
 library/perseus/      converted Perseus texts (generated, not committed)
 corpus/               downloaded Perseus XML (generated, not committed)
 site/                 the built reader (generated, not committed); site/dict/ holds the

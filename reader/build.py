@@ -9,6 +9,7 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
+from . import edits as text_edits
 from . import library
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -472,7 +473,7 @@ def render_compare(orig, ta, tb):
 
 # ---- site --------------------------------------------------------------------------
 def page_html(title, author, work_title, heads, toc, content, has_two, has_app, page_key, work_id,
-              lang, depth=1, extra_tools="", heads_cls=None):
+              lang, depth=1, extra_tools="", heads_cls=None, sources=()):
     up = "../" * depth
     tools = [extra_tools] if extra_tools else []
     if has_two:
@@ -491,6 +492,8 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
                 f'</details></nav>') if toc else ""
     layout_cls = "layout" if toc else "layout notoc"
     heads_cls = heads_cls or ("heads" if has_two else "heads one")
+    # the text ids behind the columns: original, translation, second translation (compare)
+    src_attrs = "".join(f' data-src-{k}="{html.escape(v)}"' for k, v in zip("gef", sources) if v)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -500,7 +503,7 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
 <script src="{up}settings.js"></script>
 <link rel="stylesheet" href="{up}style.css">
 </head>
-<body data-page="{html.escape(page_key)}" data-title="{html.escape(work_title)}" data-author="{html.escape(author)}" data-root="{up}" data-lang="{lang}">
+<body data-page="{html.escape(page_key)}" data-title="{html.escape(work_title)}" data-author="{html.escape(author)}" data-root="{up}" data-lang="{lang}"{src_attrs}>
 <header class="bar"><a class="home brand" href="{up}index.html" lang="grc" title="The Mandate of Fire">Θεσμὸς Πυρός</a><a class="home" href="{up}library.html">Library</a>
 <div class="title"><span class="au">{html.escape(author)}</span> <span class="wk">{html.escape(work_title)}</span></div>
 <div class="tools">{"".join(tools)}</div></header>
@@ -528,12 +531,12 @@ def edition_head(meta, others, current, kind):
     return f"<div><b>{lang}</b> {html.escape(name)}</div>"
 
 
-def collect(lib_dir):
+def collect(lib_dir, edits=None):
     works = defaultdict(list)
     for p in sorted(lib_dir.rglob("*.md")):
         if p.name.startswith(("_", ".")) or p.name.upper() == "README.MD":
             continue
-        meta, events, notes = library.parse(p)
+        meta, events, notes = library.parse(p, edits)
         if not meta.get("work"):
             continue
         meta.setdefault("id", p.stem)
@@ -602,6 +605,9 @@ def write_search_data(site, wid, author, title, parts):
     (d / f"{slug(wid)}.js").write_text(js, encoding="utf-8")
 
 
+EDITS = None          # the edit rules used by the last build (for reporting unmatched ones)
+
+
 def build(lib_dir, site, catalog=None, shelf_ids=()):
     # start clean so removed works leave no pages behind; the dictionary is kept (slow to rebuild)
     site.mkdir(parents=True, exist_ok=True)
@@ -616,7 +622,9 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
     shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
 
     rules = load_groups(ROOT / "catalog" / "groups.tsv")
-    works = collect(lib_dir)
+    global EDITS
+    EDITS = text_edits.Rules(lib_dir / "edits.tsv")
+    works = collect(lib_dir, EDITS.apply)
     index_entries, report, used = [], [], set()
     shelf_map = {}
     for wid, docs in sorted(works.items()):
@@ -658,7 +666,8 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
                                 f'title="Two translations either side of the original">Compare</a>')
                 page = page_html(f"{title} — {author}", author, title, lhead + rhead, toc, content,
                                  t is not None, has_app, f"{slug(author)}/{href}", wid,
-                                 m0.get("language", ""), extra_tools=cmp_link)
+                                 m0.get("language", ""), extra_tools=cmp_link,
+                                 sources=(o[0]["id"], t[0]["id"] if t else ""))
                 out = site / slug(author) / href
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(page, encoding="utf-8")
@@ -690,7 +699,8 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
                     f'title="Swap the two translations">Swap sides</a>')
             page = page_html(f"{title} — {author} (compare)", author, title, ahead + mhead + bhead, toc,
                              content, True, has_app, f"{slug(author)}/{href}", wid, m0.get("language", ""),
-                             extra_tools=back, heads_cls="heads three")
+                             extra_tools=back, heads_cls="heads three",
+                             sources=(originals[0][0]["id"], translations[a][0]["id"], translations[b][0]["id"]))
             (site / slug(author) / href).write_text(page, encoding="utf-8")
         write_search_data(site, wid, author, title, search_parts)
         author_id = wid.split(".")[0] if not m0.get("own") else slug(author)

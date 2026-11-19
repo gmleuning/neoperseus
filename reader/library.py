@@ -19,8 +19,11 @@ def unescape_start(line):
     return line[1:] if line[:1] == "\\" else line
 
 
-def parse(path):
+def parse(path, edits=None):
+    """edits: an optional function (raw text, path) -> raw text, applied first (reader/edits.py)."""
     raw = unicodedata.normalize("NFC", path.read_text(encoding="utf-8"))
+    if edits:
+        raw = edits(raw, path)
     meta, body = {}, raw
     if raw.startswith("---"):
         end = raw.find("\n---", 3)

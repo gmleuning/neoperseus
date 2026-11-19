@@ -4,6 +4,8 @@
     python perseus.py remove tlg0006.tlg012   take it off the shelf (its downloaded and converted files are deleted)
     python perseus.py update                  fetch anything missing, convert, and rebuild the site
     python perseus.py build                   rebuild the site only (after editing your own texts)
+    python perseus.py edit                    edit texts in the browser (this computer only), then Publish
+    python perseus.py publish                 rebuild, commit library/edits.tsv, push, deploy
     python perseus.py find euripides          search the catalog from the command line
     python perseus.py dictionaries            download and build LSJ and Lewis & Short (once; about 440 MB)
     python perseus.py import-wikisource FILE.epub --work ID [--lang grc] [--author A] [--title T]
@@ -41,6 +43,8 @@ def cmd_build(args, catalog=None):
     flagged = [r for r in report if r[5] and r[3] / r[5] < 0.9 and not r[6]]
     approx = [r for r in report if r[6]]
     print(f"built {len(entries)} work(s) into {SITE}")
+    for tid, action, anchor in (builder.EDITS.unmatched() if builder.EDITS else []):
+        print(f"  edit not applied (text changed?): {tid} {action} \"{anchor[:50]}…\"")
     if approx:
         print(f"  {len(approx)} verse translation(s) have their own line numbers and are placed approximately"
               " (see site/_sync.md)")
@@ -118,6 +122,16 @@ def cmd_import_wikisource(args):
     print("edit it if needed, then run: python perseus.py build")
 
 
+def cmd_edit(args):
+    from reader import editserver
+    editserver.serve(args.port, not args.no_browser)
+
+
+def cmd_publish(args):
+    from reader import editserver
+    sys.exit(0 if editserver.publish_cli() else 1)
+
+
 def main():
     for stream in (sys.stdout, sys.stderr):      # Windows consoles: never fail on Greek
         try:
@@ -132,6 +146,9 @@ def main():
                                                  help="reconvert everything"); p.set_defaults(fn=cmd_update)
     p = sub.add_parser("build"); p.set_defaults(fn=cmd_build)
     p = sub.add_parser("dictionaries"); p.set_defaults(fn=cmd_dictionaries)
+    p = sub.add_parser("edit"); p.add_argument("--port", type=int, default=8790)
+    p.add_argument("--no-browser", action="store_true"); p.set_defaults(fn=cmd_edit)
+    p = sub.add_parser("publish"); p.set_defaults(fn=cmd_publish)
     p = sub.add_parser("find"); p.add_argument("words", nargs="+"); p.set_defaults(fn=cmd_find)
     p = sub.add_parser("import-wikisource")
     p.add_argument("file"); p.add_argument("--work", required=True)
