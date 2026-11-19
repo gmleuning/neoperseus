@@ -16,6 +16,7 @@ title: Electra                      # title for the index (usually English)
 label: Ἠλέκτρα                      # title in the original, shown beside it
 edition: Gilbert Murray             # editor or translator, a name only
 language: grc                       # grc or lat = an original (left column); anything else = a translation
+original: grc                       # optional, for a translation stored alone: the language it is filed under
 layout: verse                       # verse | prose
 numbering: explicit                 # explicit | auto | auto-by-section (verse only, see below)
 source: PerseusDL/canonical-greekLit/data/tlg0006/tlg012/tlg0006.tlg012.perseus-grc2.xml

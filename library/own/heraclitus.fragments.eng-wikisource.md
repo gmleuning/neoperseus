@@ -6,6 +6,7 @@ title: Fragments
 label: Fragments of Heraclitus
 edition: Wikisource
 language: eng
+original: grc
 layout: prose
 numbering: explicit
 source: https://en.wikisource.org/wiki/Fragments_of_Heraclitus_%28annotated%29

@@ -3,7 +3,7 @@
 (function () {
   var KEY = "reader-settings";
   var DEFAULTS = {
-    theme: "auto", grc: "Gentium Book Plus", lat: "Gentium Book Plus", eng: "Spectral",
+    theme: "auto", accent: "red", grc: "Gentium Book Plus", lat: "Gentium Book Plus", eng: "Spectral",
     size: 17, oscale: 110, lh: 1.6, width: "medium",
     cols: "both", align: "speech", ln: "5", mk: "on", fn: "on", toc: "on", justify: "off",
     dict: "on", abbr: "expand"
@@ -13,6 +13,15 @@
     lat: ["Gentium Book Plus", "Spectral", "EB Garamond", "Cardo", "Georgia", "Palatino Linotype"],
     eng: ["Spectral", "EB Garamond", "Cardo", "Gentium Book Plus", "Georgia", "Palatino Linotype", "system-ui"]
   };
+  // Accent colours as [accent, highlight] per scheme. Red is the stylesheet's own default.
+  var ACCENTS = {
+    red:    { name: "Red", c: "#a3281f" },
+    blue:   { name: "Blue", c: "#34477a", light: ["#34477a", "#dfe5f4"], sepia: ["#3d5080", "#dcd9c6"], dark: ["#a4b4e2", "#27304a"], black: ["#9fb0dc", "#1c2335"] },
+    green:  { name: "Green", c: "#2f6b43", light: ["#2f6b43", "#dcebe0"], sepia: ["#4b6a2c", "#e0e0b8"], dark: ["#9ccaa8", "#22352a"], black: ["#98c4a3", "#16241b"] },
+    gold:   { name: "Gold", c: "#8a6410", light: ["#8a6410", "#f0e6c8"], sepia: ["#7a4a1f", "#ead9b5"], dark: ["#d9b45f", "#3a3220"], black: ["#d4b25c", "#2a2312"] },
+    violet: { name: "Violet", c: "#5b3f8c", light: ["#5b3f8c", "#e6dff3"], sepia: ["#5b3f8c", "#e3d6dc"], dark: ["#bba6e6", "#2e2742"], black: ["#b5a1e0", "#1e1930"] }
+  };
+  var dark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   var WIDTHS = { narrow: "64rem", medium: "84rem", wide: "110rem", full: "none" };
 
   function load() {
@@ -31,6 +40,10 @@
   function apply() {
     var r = document.documentElement, s = r.style, p = prefs;
     if (p.theme === "auto") r.removeAttribute("data-theme"); else r.setAttribute("data-theme", p.theme);
+    var scheme = p.theme === "auto" ? (dark && dark.matches ? "dark" : "light") : p.theme;
+    var ac = ACCENTS[p.accent];
+    if (ac && ac[scheme]) { s.setProperty("--accent", ac[scheme][0]); s.setProperty("--hl", ac[scheme][1]); }
+    else { s.removeProperty("--accent"); s.removeProperty("--hl"); }
     s.setProperty("--font-grc", fam(p.grc));
     s.setProperty("--font-lat", fam(p.lat));
     s.setProperty("--font-eng", fam(p.eng));
@@ -52,6 +65,7 @@
     for (var i = 0; i < listeners.length; i++) listeners[i](p);
   }
   apply();
+  if (dark && dark.addEventListener) dark.addEventListener("change", function () { if (prefs.theme === "auto") apply(); });
 
   window.ReaderSettings = {
     get: function (k) { return prefs[k]; },
@@ -127,6 +141,7 @@
     body.appendChild(group("Appearance", [
       row("Colour scheme", chips("theme", [["auto", "Auto"], ["light", SW("#f4f5f2") + "Light"],
         ["sepia", SW("#f3ead8") + "Sepia"], ["dark", SW("#15171b") + "Dark"], ["black", SW("#000") + "Black"]])),
+      row("Accent colour", chips("accent", Object.keys(ACCENTS).map(function (k) { return [k, SW(ACCENTS[k].c) + ACCENTS[k].name]; }))),
       row("Page width", chips("width", [["narrow", "Narrow"], ["medium", "Medium"], ["wide", "Wide"], ["full", "Full"]]))
     ]));
     var preview = el("div", { "class": "preview" },

@@ -421,7 +421,7 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
 <link rel="stylesheet" href="{up}style.css">
 </head>
 <body data-page="{html.escape(page_key)}" data-title="{html.escape(work_title)}" data-author="{html.escape(author)}" data-root="{up}" data-lang="{lang}">
-<header class="bar"><a class="home" href="{up}index.html">Library</a>
+<header class="bar"><a class="home brand" href="{up}index.html" lang="grc" title="The Mandate of Fire">Θεσμὸς Πυρός</a><a class="home" href="{up}library.html">Library</a>
 <div class="title"><span class="au">{html.escape(author)}</span> <span class="wk">{html.escape(work_title)}</span></div>
 <div class="tools">{"".join(tools)}</div></header>
 <div class="{layout_cls}">{toc_html}
@@ -529,7 +529,8 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
         if child.name == "dict":
             continue
         shutil.rmtree(child) if child.is_dir() else child.unlink()
-    for name in ("style.css", "settings.js", "reader.js", "dict.js", "index.js", "catalog.js", "search.js"):
+    for name in ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "catalog.js", "search.js",
+                 "beacon.jpg"):
         if (ASSETS / name).exists():
             shutil.copy(ASSETS / name, site / name)
     shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
@@ -585,18 +586,25 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
                                          "ed": t[0].get("edition") or t[0].get("label", ""),
                                          "segs": segments(final[1])})
         write_search_data(site, wid, author, title, search_parts)
-        author_id = wid.split(".")[0] if not m0.get("own") else "own-" + slug(author)
+        author_id = wid.split(".")[0] if not m0.get("own") else slug(author)
         desc = m0.get("description", "")
         index_entries.append({
             "work": wid, "author": author, "author_id": author_id, "title": title,
             "label": m0.get("label", ""), "href": f"{slug(author)}/{hrefs[(0, 0)]}",
             "translations": [d[0].get("edition") or d[0].get("label", "") for d in translations],
-            "lang": m0.get("language", ""), "own": bool(m0.get("own")),
+            "lang": m0.get("language", ""), "orig": m0.get("original") or m0.get("language", ""),
+            "own": bool(m0.get("own")),
             "group": group_of(rules, author_id, title, desc),
             "search": f"search/{slug(wid)}.js",
         })
         shelf_map[wid] = f"{slug(author)}/{hrefs[(0, 0)]}"
-    write_index(site, index_entries)
+    # your own texts sit under the same author as the Perseus ones when the names agree
+    ids = {e["author"]: e["author_id"] for e in index_entries if not e["own"]}
+    for e in index_entries:
+        if e["own"]:
+            e["author_id"] = ids.get(e["author"], e["author_id"])
+    write_landing(site, index_entries)
+    write_library(site, index_entries)
     write_catalog(site, catalog, {e["work"] for e in index_entries})
     write_search_page(site, index_entries)
     (site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf_map, ensure_ascii=False) + ";\n",
@@ -625,28 +633,45 @@ def html_page(title, body_cls, main, scripts, data_js=""):
 
 
 def top_links(current):
-    links = [("index.html", "Library"), ("search.html", "Search texts"), ("catalog.html", "Catalog")]
+    links = [("index.html", "The Mandate of Fire"), ("library.html", "Library"),
+             ("search.html", "Search texts"), ("catalog.html", "Catalog")]
     out = "".join(f'<a href="{h}">{t}</a>' for h, t in links if h != current)
     return (f'<nav class="links">{out}<button type="button" class="icon-btn" data-settings '
             f'aria-expanded="false" aria-controls="settings">Settings</button></nav>')
 
 
-def write_index(site, entries):
+def write_library(site, entries):
     data = json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
     n = len(entries)
     main = f"""<main class="lib">
-<div class="lib-top"><h1>Library</h1>{top_links("index.html")}</div>
+<div class="lib-top"><h1>Library</h1>{top_links("library.html")}</div>
 <p class="count">{n} work{"s" if n != 1 else ""} on the shelf</p>
 <section id="continue-wrap" hidden><h3 class="label">Continue reading</h3><div class="continue" id="continue"></div></section>
 <div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
 <div class="chips" id="langs" role="group" aria-label="Language">
-<button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button><button type="button" data-l="own" aria-pressed="false">My texts</button></div></div>
+<button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button></div></div>
 <div class="shelf"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
 <noscript><p>The library list needs JavaScript.</p></noscript>
 </main>"""
-    (site / "index.html").write_text(
-        html_page("Library", "index", main, ["index.js"], f"<script>window.LIBRARY = {data};</script>"),
+    (site / "library.html").write_text(
+        html_page("Library", "index", main, ["library.js"], f"<script>window.LIBRARY = {data};</script>"),
         encoding="utf-8")
+
+
+def write_landing(site, entries):
+    main = """<main class="landing">
+<div class="art" aria-hidden="true"><img src="beacon.jpg" alt=""></div>
+<div class="veil" aria-hidden="true"></div>
+<nav class="land-top"><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
+<button type="button" class="icon-btn" data-settings aria-expanded="false" aria-controls="settings">Settings</button></nav>
+<section class="hero">
+<h1 lang="grc">Θεσμὸς Πυρός</h1>
+<p class="sub">The Mandate of Fire</p>
+</section>
+<footer class="land-foot">Painting: J. M. W. Turner, <i>Seascape with Storm Coming On</i>.</footer>
+</main>"""
+    (site / "index.html").write_text(
+        html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], ""), encoding="utf-8")
 
 
 def write_search_page(site, entries):

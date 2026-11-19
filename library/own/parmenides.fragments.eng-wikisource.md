@@ -6,6 +6,7 @@ title: On Nature
 label: The Fragments of Parmenides
 edition: Wikisource
 language: eng
+original: grc
 layout: verse
 numbering: auto
 source: https://en.wikisource.org/wiki/The_Fragments_of_Parmenides_%28Davidson_1869%29

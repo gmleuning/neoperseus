@@ -1,4 +1,4 @@
-// Library page: continue reading, authors on the left, the chosen author's works on the
+// Library page (library.html): continue reading, authors on the left, the chosen author's works on the
 // right (grouped for authors with many works), and a finder across everything.
 (function () {
   var works = window.LIBRARY || [];
@@ -14,7 +14,7 @@
   }
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function langOf(w) { return w.own ? "own" : (w.lang === "lat" ? "lat" : "grc"); }
+  function langOf(w) { var o = w.orig || w.lang; return o === "lat" ? "lat" : (o === "grc" ? "grc" : "other"); }
   function langAttr(l) { return l === "grc" ? "grc" : (l === "lat" ? "la" : "en"); }
 
   // reading positions saved by the reader pages
@@ -56,11 +56,11 @@
   order.sort(function (a, b) { return fold(a.name) < fold(b.name) ? -1 : 1; });
 
   var lang = "all", current = null;
-  var LANG_HEAD = { grc: "Greek", lat: "Latin", own: "My texts" };
+  var LANG_HEAD = { grc: "Greek", lat: "Latin", other: "Other" };
 
   function renderAuthors(matching) {
     var html = [];
-    ["grc", "lat", "own"].forEach(function (l) {
+    ["grc", "lat", "other"].forEach(function (l) {
       if (lang !== "all" && lang !== l) return;
       var list = order.filter(function (a) { return a.lang === l && (!matching || matching[a.id]); });
       if (!list.length) return;

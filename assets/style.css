@@ -20,7 +20,7 @@
 /* ---- tokens --------------------------------------------------------- */
 :root {
   --paper: #f4f5f2; --ink: #1f2329; --muted: #6a707a; --faint: #d3d6da;
-  --accent: #34477a; --hl: #dfe5f4; --panel: #fbfbf9; --mark: #f3e3a6;
+  --accent: #a3281f; --hl: #f3dcd8; --panel: #fbfbf9; --mark: #f3e3a6;
   --font-grc: "Gentium Book Plus"; --font-lat: "Gentium Book Plus"; --font-eng: "Spectral";
   --gk: var(--font-grc), "Gentium Book Plus", serif;
   --la: var(--font-lat), "Gentium Book Plus", serif;
@@ -31,21 +31,21 @@
 }
 :root[data-theme="sepia"] {
   --paper: #f3ead8; --ink: #3a2f22; --muted: #7d6c57; --faint: #dccdb1;
-  --accent: #7a4a1f; --hl: #ead9b5; --panel: #f8f1e3; --mark: #e8cf86;
+  --accent: #9b2c1d; --hl: #ecd3bd; --panel: #f8f1e3; --mark: #e8cf86;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --paper: #15171b; --ink: #d9dbdf; --muted: #8d939c; --faint: #343841;
-    --accent: #a4b4e2; --hl: #27304a; --panel: #1b1e23; --mark: #5a4b17; color-scheme: dark;
+    --accent: #e8918a; --hl: #3a2325; --panel: #1b1e23; --mark: #5a4b17; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --paper: #15171b; --ink: #d9dbdf; --muted: #8d939c; --faint: #343841;
-  --accent: #a4b4e2; --hl: #27304a; --panel: #1b1e23; --mark: #5a4b17; color-scheme: dark;
+  --accent: #e8918a; --hl: #3a2325; --panel: #1b1e23; --mark: #5a4b17; color-scheme: dark;
 }
 :root[data-theme="black"] {
   --paper: #000; --ink: #c9c9c9; --muted: #808080; --faint: #262626;
-  --accent: #9fb0dc; --hl: #1c2335; --panel: #0b0b0b; --mark: #4d4114; color-scheme: dark;
+  --accent: #e08a84; --hl: #2a1717; --panel: #0b0b0b; --mark: #4d4114; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -73,6 +73,8 @@ button, input, select { font: inherit; color: inherit; }
 }
 .bar .home { color: var(--muted); text-decoration: none; font-size: .9rem; }
 .bar .home:hover { color: var(--accent); }
+.bar .brand { font-family: var(--gk); color: var(--accent); }
+@media (max-width: 760px) { .bar .brand { display: none; } }
 .bar .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar .au { color: var(--muted); }
 .bar .wk { font-style: italic; }
@@ -398,3 +400,19 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
 }
 @media (prefers-reduced-motion: reduce) { .flash { transition: none; } }
 @media print { .bar, .toc, .heads, .drawer { display: none; } .layout { display: block; padding: 0; } }
+
+/* ---- landing page (index.html) -------------------------------------- */
+body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
+.landing main { position: relative; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+.landing .art { position: absolute; left: 50%; top: 50%; width: max(100vw, 156.86vh); aspect-ratio: 1200 / 765; transform: translate(-50%, -50%); }
+.landing .art img { width: 100%; height: 100%; display: block; filter: saturate(.85) brightness(.8); }
+.landing .veil { position: absolute; inset: 0; background:
+  linear-gradient(180deg, rgba(10,8,8,.55) 0%, rgba(10,8,8,.15) 38%, rgba(10,8,8,.82) 100%); }
+.landing .land-top { position: relative; display: flex; gap: 1.4rem; justify-content: flex-end; align-items: baseline; padding: 1.1rem 1.6rem; font-size: .92rem; }
+.landing .land-top a { color: #e9dfd6; text-decoration: none; }
+.landing .land-top a:hover { color: var(--accent); }
+.landing .land-top .icon-btn { color: #e9dfd6; border-color: rgba(255,255,255,.3); background: rgba(0,0,0,.25); }
+.landing .hero { position: relative; margin: auto 0 0; padding: 0 1.6rem 3.2rem; max-width: 46rem; margin-left: clamp(0rem, 6vw, 6rem); }
+.landing h1 { font-family: var(--gk); font-weight: 400; font-size: clamp(2.8rem, 8vw, 5.4rem); line-height: 1.05; margin: 0; letter-spacing: .01em; text-shadow: 0 2px 28px rgba(0,0,0,.6); }
+.landing .sub { font-size: 1.25rem; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: .4rem 0 0; }
+.landing .land-foot { position: relative; padding: 0 1.6rem 1rem; color: #9d948b; font-size: .75rem; }

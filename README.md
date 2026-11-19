@@ -34,9 +34,9 @@ python perseus.py dictionaries                 # once: LSJ and Lewis & Short (do
 Several ids can go in one `add` (`python perseus.py add tlg0011 tlg0059 phi0690`), or edit
 `shelf.txt` (one id per line) and run `update`.
 
-Then open `site/index.html`:
+Then open `site/index.html`, the landing page (*Θεσμὸς Πυρός*, the Mandate of Fire):
 
-- **Library**: what you were last reading, then authors on the left and the chosen author's
+- **Library** (`library.html`): what you were last reading, then authors on the left and the chosen author's
   works on the right. Authors with many works are grouped (Cicero: speeches, rhetoric,
   philosophy, letters); the rules are in `catalog/groups.tsv` and can be edited. The box at the
   top finds works and authors across the shelf.
@@ -94,7 +94,8 @@ from PDFs) out of `library/own/` if you publish.
 
 ## Your own texts
 
-Any Markdown file in `library/own/` that follows [SPEC.md](SPEC.md) is part of the library.
+Any Markdown file in `library/own/` that follows [SPEC.md](SPEC.md) is part of the library, listed under
+its author beside the Perseus texts.
 To start from a Wikisource text, export it from Wikisource as EPUB, then:
 
 ```powershell
