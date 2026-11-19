@@ -610,7 +610,7 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
             continue
         shutil.rmtree(child) if child.is_dir() else child.unlink()
     for name in ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "catalog.js",
-                 "search.js", "beacon.jpg"):
+                 "search.js", "beacon.jpg", "beacon-tall.jpg"):
         if (ASSETS / name).exists():
             shutil.copy(ASSETS / name, site / name)
     shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
@@ -796,7 +796,7 @@ def write_local_page(site):
 
 def write_landing(site, entries):
     main = """<main class="landing">
-<div class="art" aria-hidden="true"><img src="beacon.jpg" alt=""></div>
+<div class="art" aria-hidden="true"><picture><source media="(orientation: portrait)" srcset="beacon-tall.jpg"><img src="beacon.jpg" alt=""></picture></div>
 <div class="veil" aria-hidden="true"></div>
 <nav class="land-top"><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
 <button type="button" class="icon-btn" data-settings aria-expanded="false" aria-controls="settings">Settings</button></nav>
