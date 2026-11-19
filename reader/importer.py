@@ -245,3 +245,210 @@ def convert(text, meta):
     report = {"verse_lines": verse_n, "last_line": line_no, "notes": len(notes), "note_refs": len(refs),
               "notes_matched": len(used)}
     return md, report
+
+
+# ---- books (PDF, EPUB): pages of lines from reader/sources.py -> library format ------------
+ACT_HEAD = re.compile(r"^(ACT|ACTUS|SCENE|SCAENA|SCENA|PROLOGUE|PROLOGUS|EPILOGUE|ODE|"
+                      r"EPISODE|PARODOS|STASIMON|EXODOS|STROPHE|ANTISTROPHE|EPODE)\b", re.I)
+CAST_HEAD = re.compile(r"^(characters|personae|dramatis personae|cast|persons of the (drama|play))\b:?", re.I)
+LEAD_NUM = re.compile(r"^(\d{1,4})(?=[^\d\s.,:;)\]–-]|\s+\S|$)\s*")
+TRAIL_NUM = re.compile(r"\s+(\d{1,4})$")
+END_HEAD = re.compile(r"^(selective )?(critical apparatus|apparatus|commentary|textual notes|notes|sigla|index|"
+                      r"bibliography|appendix)\b", re.I)
+ABBREV = re.compile(r"^([A-Za-z]{2,5}\.)\s+(?=[A-ZÀ-Ö(])")
+
+
+def convert_lines(lines, meta, drop=("||",)):
+    """Lines of a book's verse part -> (library Markdown, report). meta: id, work, author, title,
+    edition, language, source. drop: lines containing any of these are left out (apparatus)."""
+    lines = [dict(l) for l in lines if not any(d and d in l.get("t", "") for d in drop)]
+    # running heads: the same short line on many pages (not a speaker)
+    seen = {}
+    for l in lines:
+        t = l.get("t", "")
+        if t and len(t) < 50 and not l.get("lead") and t.upper() != t:
+            seen[t] = seen.get(t, 0) + 1
+    title = fold(meta.get("title", ""))
+    junk = {t for t, n in seen.items() if n >= 5 and (fold(t) == title or not re.search(r"[.,;:!?]$", t))}
+    lines = [l for l in lines if l.get("t", "") not in junk]
+
+    # where are the line numbers: before the line (margin, own line, glued on) or after it?
+    lead_n = sum(1 for l in lines if l.get("margin") or LEAD_NUM.match(l.get("t", "")))
+    trail_n = sum(1 for l in lines if TRAIL_NUM.search(l.get("t", "")))
+    trailing = trail_n > lead_n
+
+    # speakers given as abbreviations ("lyc. Sceptroque ..."), accepted when they recur
+    count = {}
+    for l in lines:
+        m = ABBREV.match(l.get("t", ""))
+        if m and not l.get("it"):
+            count[m.group(1)] = count.get(m.group(1), 0) + 1
+    abbr = {a for a, n in count.items() if n >= 2}
+    names = set()
+
+    # items: ("verse", text, number, number at end) | ("spk", name) | ("stage", text)
+    #        | ("head", text) | ("brk",)
+    items, front = [], []
+    in_front, cast, pending = True, False, None
+    for l in lines:
+        t = l.get("t", "")
+        if l.get("brk"):
+            items.append(("brk",))
+            continue
+        if l.get("margin"):
+            pending = l["margin"]
+            continue
+        if not t or re.fullmatch(r"\[[\w ]{1,6}\]", t):
+            continue                                      # nothing, or an OCR'd page number
+        if not in_front and items and END_HEAD.match(t) and (l.get("head") or t.upper() == t):
+            break                                         # the apparatus or commentary after the play
+        if l.get("head") or (len(t) < 40 and ACT_HEAD.match(t) and t.upper() == t):
+            if not re.search(r"[A-Za-z]{3}", t) or fold(t) == title:
+                continue                                  # OCR'd numbers, the play's title
+            if CAST_HEAD.match(t):
+                cast = True
+                continue
+            if ACT_HEAD.match(t) and (t.upper() == t or re.match(r"(?i)act(us)?\b", t)):
+                in_front = False
+                items.append(("head", t.title() if t.upper() == t else t))
+            elif in_front:
+                front.append(("label", t.rstrip(":")))
+            continue
+        if in_front and not l.get("it") and not (LEAD_NUM.match(t) or TRAIL_NUM.search(t) or l.get("lead")
+                                                 or re.fullmatch(r"\d{1,4}", t)):
+            # before the play: the cast list (it may have begun on an earlier page)
+            if re.fullmatch(r"[A-ZÀ-Öa-zà-ÿ .'’\-]+", t) and len(t) < 30:
+                names.add(t.rstrip(".").upper())
+            if front and front[-1][0] == "p" and (t[:1] in "(" or t[:1].islower()):
+                front[-1] = ("p", front[-1][1] + " " + t)
+            else:
+                front.append(("p", t))
+            continue
+        in_front = False
+        if l.get("it"):
+            if items and items[-1][0] == "stage" and (not items[-1][1].endswith((".", "!", "?"))
+                                                       or t[:1].islower()):
+                items[-1] = ("stage", items[-1][1] + " " + t)
+            else:
+                items.append(("stage", t))
+            continue
+        if re.fullmatch(r"\d{1,4}", t):
+            pending = int(t)                              # a number on its own line
+            continue
+        spk = l.get("lead")
+        if not spk:
+            m = ABBREV.match(t)
+            if m and m.group(1) in abbr:
+                spk, t = m.group(1), t[m.end():]
+            elif len(t) <= 40 and re.fullmatch(r"[A-ZÀ-Ö][A-ZÀ-Ö .'’\-]+\.?", t) and len(t.strip(". ")) > 2:
+                spk, t = t, ""
+        if spk:
+            spk = spk.strip()
+            if spk.endswith(".") and len(spk) <= 6 or spk.lower() == spk:
+                short = spk.rstrip(".").upper()
+                spk = next((n for n in sorted(names) if n.startswith(short)), short)
+            spk = spk.rstrip(".")
+            items.append(("spk", spk))
+            if not t:
+                continue
+        num, at_end = None, False
+        m = None if trailing else LEAD_NUM.match(t)
+        if m and m.end() < len(t):
+            num, t = int(m.group(1)), t[m.end():]
+        elif trailing:
+            m = TRAIL_NUM.search(t)
+            if m:
+                num, at_end, t = int(m.group(1)), True, t[:m.start()]
+        if num is None and pending is not None:
+            num = pending
+        pending = None
+        items.append(("verse", t.strip(), num, at_end))
+
+    # a number for every verse line: anchors where the book prints one, estimated between
+    # (an OCR'd book may run several lines together: their length tells how many)
+    verses = [i for i, it in enumerate(items) if it[0] == "verse"]
+    lens = sorted(len(items[i][1]) for i in verses if items[i][2] is not None) or [40]
+    med = max(12, lens[len(lens) // 2])
+    est = {i: max(1, round(len(items[i][1]) / med)) if len(items[i][1]) > 1.6 * med else 1 for i in verses}
+    anchors = []
+    for i in verses:
+        n = items[i][2]
+        if n is None:
+            continue
+        start = n - est[i] + 1 if items[i][3] else n
+        if anchors and not (0 < start - anchors[-1][1] <= 60):
+            continue                                      # a stray or misread number
+        anchors.append((i, start))
+    keys = {}
+    if anchors:
+        first_i, first_s = anchors[0]
+        before = [i for i in verses if i < first_i]
+        s = first_s - sum(est[i] for i in before)
+        for i in before:
+            keys[i] = max(1, s)
+            s += est[i]
+        for (ai, a), (bi, b) in zip(anchors, anchors[1:] + [(None, None)]):
+            span = [i for i in verses if i >= ai and (bi is None or i < bi)]
+            total = sum(est[i] for i in span)
+            room = (b - a) if b is not None else total
+            cum = 0
+            for i in span:
+                keys[i] = a + (cum * room) // total
+                cum += est[i]
+    else:
+        for n, i in enumerate(verses, 1):
+            keys[i] = n
+
+    out, last_key, n_lines, n_half = [], None, 0, 0
+    for i, it in enumerate(items):
+        kind = it[0]
+        if kind == "brk":
+            if out and out[-1] != "":
+                out.append("")
+        elif kind == "head":
+            out.extend(["", "### " + it[1], ""])
+        elif kind == "spk":
+            out.extend(["", f"**{it[1]}**"])
+        elif kind == "stage":
+            out.extend(["", f"*({it[1].strip('()')})*", ""])
+        else:
+            text = it[1]
+            if re.match(r"^(\*\*|\*\(|##|> |¶ |\\|:::)", text):
+                text = "\\" + text
+            k = keys.get(i)
+            if k is None or (last_key is not None and k <= last_key):
+                out.append(f"{{{{+}}}} {text}")
+                n_half += 1
+            else:
+                out.append(f"{{{{{k}}}}} {text}")
+                last_key = k
+                n_lines += 1
+
+    head = []
+    if front:
+        texts = [t for k, t in front if k == "p"]
+        short = texts and sum(len(t) for t in texts) / len(texts) < 90
+        head += ["::: Characters" if cast or short else "::: Introduction", ""]
+        label = None
+        for kind, t in front:
+            if kind == "label":
+                label = t
+                continue
+            head += [f"¶ {label}: {t}" if label else f"¶ {t}", ""]
+            label = None
+        head += [":::", ""]
+
+    body = re.sub(r"\n{3,}", "\n\n", "\n".join(head + out)).strip()
+    fm = ["---", f"id: {meta['id']}", f"work: {meta['work']}", f"author: {meta['author']}",
+          f"title: {meta['title']}"]
+    if meta.get("edition"):
+        fm.append(f"edition: {meta['edition']}")
+    fm += [f"language: {meta.get('language', 'eng')}", "layout: verse", "numbering: explicit"]
+    if meta.get("source"):
+        fm.append(f"source: {meta['source']}")
+    fm.append("---")
+    report = {"verse_lines": n_lines + n_half, "last_line": last_key or 0, "numbered_in_book": len(anchors),
+              "speakers": len({it[1] for it in items if it[0] == "spk"}),
+              "stage": sum(1 for it in items if it[0] == "stage"), "half_lines": n_half,
+              "numbers_at": "end of line" if trailing else "start of line"}
+    return "\n".join(fm) + "\n\n" + body + "\n", report

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import edits as text_edits
 from . import importer
+from . import sources
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
@@ -35,38 +36,91 @@ def shelf():
     return {p.name for p in d.iterdir()} if d.is_dir() else set()
 
 
+BOOKS = (".pdf", ".epub")
+ACCEPT = (".md",) + BOOKS
+_pages = {}                                     # (path, mtime) -> pages of lines
+
+
+def book_pages(p):
+    key = (str(p), p.stat().st_mtime)
+    if key not in _pages:
+        _pages.clear()                          # one book at a time: they can be large
+        _pages[key] = sources.read_pages(p)
+    return _pages[key]
+
+
 def inbox():
-    """Raw .md files in library/additions (no library front matter), with guessed details."""
+    """Files in library/additions waiting to be imported: raw .md (no library front matter),
+    PDF and EPUB books, with guessed details."""
     out = []
     if not INBOX.is_dir():
         return out
-    for p in sorted(INBOX.glob("*.md")):
-        head = p.read_text(encoding="utf-8", errors="replace")[:600]
-        if head.startswith("---") and "\nwork:" in head:
-            continue                       # already in the library format
+    for p in sorted(x for x in INBOX.iterdir() if x.suffix.lower() in ACCEPT):
+        if p.suffix.lower() == ".md":
+            head = p.read_text(encoding="utf-8", errors="replace")[:600]
+            if head.startswith("---") and "\nwork:" in head:
+                continue                       # already in the library format
         g = importer.guess(p, catalog(), shelf())
         done = [k for k, d in DEST.items() if (d / f"{g['id']}.md").exists()]
-        out.append({"file": p.name, **g, "imported": done})
+        out.append({"file": p.name, **g, "imported": done,
+                    "kind": "book" if p.suffix.lower() in BOOKS else "md"})
     return out
 
 
-def do_import(b):
+def book_parts(name):
+    """The verse parts found in a book, best first, for the Import panel."""
+    src = INBOX / Path(name).name
+    if src.suffix.lower() not in BOOKS or not src.is_file():
+        raise ValueError("not a PDF or EPUB in library/additions")
+    pages = book_pages(src)
+    parts = sources.parts(pages)
+    for p in parts:
+        p.pop("score", None)
+    return {"pages": len(pages), "parts": parts}
+
+
+def do_import(b, preview=False):
     src = INBOX / Path(b["file"]).name
     if not src.is_file():
         raise ValueError("file not found in library/additions")
     dest = DEST.get(b.get("dest"))
-    if dest is None:
+    if dest is None and not preview:
         raise ValueError("destination must be private or own")
     meta = {k: (b.get(k) or "").strip() for k in ("id", "work", "author", "title", "edition", "language")}
     meta["language"] = meta["language"] or "eng"
     meta["source"] = src.name
     if not meta["work"] or not meta["id"]:
         raise ValueError("work and id are needed")
-    md, report = importer.convert(src.read_text(encoding="utf-8"), meta)
+    if src.suffix.lower() in BOOKS:
+        pages = book_pages(src)
+        chosen = sources.page_range(b.get("pages", ""), len(pages))
+        if not chosen:
+            raise ValueError("choose the pages that hold the text")
+        lines = [l for n in chosen for l in pages[n - 1]]
+        drop = [d.strip() for d in (b.get("drop") or "").split(",") if d.strip()]
+        md, report = importer.convert_lines(lines, meta, drop)
+        if meta.get("source"):
+            md = md.replace(f"source: {meta['source']}", f"source: {meta['source']}, pages {b.get('pages')}", 1)
+    else:
+        md, report = importer.convert(src.read_text(encoding="utf-8"), meta)
+    if preview:
+        lines = md.split("\n")
+        return {"ok": True, "preview": "\n".join(lines[:160]) + ("\n…" if len(lines) > 160 else ""),
+                "tail": "\n".join(lines[-25:]), "report": report}
     dest.mkdir(parents=True, exist_ok=True)
     out = dest / f"{meta['id']}.md"
     out.write_text(md, encoding="utf-8")
     return {"ok": True, "path": str(out.relative_to(ROOT)).replace("\\", "/"), "report": report}
+
+
+def save_upload(name, data):
+    """A file chosen in the Import panel, copied into library/additions."""
+    name = Path(name).name
+    if Path(name).suffix.lower() not in ACCEPT or name.startswith("."):
+        raise ValueError("only .md, .pdf and .epub files")
+    INBOX.mkdir(parents=True, exist_ok=True)
+    (INBOX / name).write_bytes(data)
+    return {"ok": True, "file": name}
 EDIT_JS = ROOT / "assets" / "edit.js"
 INJECT = b'<script src="/__edit/edit.js"></script>\n</body>'
 
@@ -192,6 +246,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(JOB.status())
         if path == "/__edit/inbox":
             return self.send_json(inbox())
+        if path == "/__edit/parts":
+            from urllib.parse import parse_qs, urlsplit
+            q = parse_qs(urlsplit(self.path).query)
+            try:
+                return self.send_json(book_parts(q.get("file", [""])[0]))
+            except (ValueError, RuntimeError, OSError) as e:
+                return self.send_json({"error": str(e)}, 400)
         # pages: add the edit tools on the way out
         local = Path(self.translate_path(path))
         if local.is_dir():
@@ -209,6 +270,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
+        if path == "/__edit/upload":
+            from urllib.parse import parse_qs, unquote, urlsplit
+            name = unquote(parse_qs(urlsplit(self.path).query).get("name", [""])[0])
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 300 * 1024 * 1024:
+                return self.send_json({"error": "file too large"}, 400)
+            try:
+                return self.send_json(save_upload(name, self.rfile.read(n)))
+            except (ValueError, OSError) as e:
+                return self.send_json({"error": str(e)}, 400)
         try:
             b = self.body()
         except ValueError:
@@ -222,10 +293,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/__edit/undo":
             rules.remove(b.get("id", ""), b.get("action", "delete"), b.get("anchor", ""))
             return self.send_json({"ok": True})
-        if path == "/__edit/import":
+        if path in ("/__edit/import", "/__edit/preview"):
             try:
-                return self.send_json(do_import(b))
-            except (ValueError, KeyError) as e:
+                return self.send_json(do_import(b, preview=path.endswith("preview")))
+            except (ValueError, KeyError, RuntimeError, OSError) as e:
                 return self.send_json({"error": str(e)}, 400)
         if path == "/__edit/build":
             return self.send_json({"started": JOB.start("Rebuild", build_steps())})

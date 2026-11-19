@@ -24,9 +24,11 @@
     ".ed-imp{position:fixed;inset:5vh 50% auto auto;transform:translateX(50%);z-index:62;width:min(46rem,94vw);max-height:90vh;overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--accent);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.3);font:13px/1.45 system-ui,sans-serif;padding:1rem 1.2rem}" +
     ".ed-imp h3{margin:0 0 .3rem;font-size:1.05rem} .ed-imp .file{border-top:1px solid var(--faint);padding:.7rem 0} .ed-imp .file b{font-weight:600}" +
     ".ed-imp label{display:inline-flex;flex-direction:column;margin:.3rem .6rem 0 0;color:var(--muted);font-size:12px} .ed-imp input,.ed-imp select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--faint);border-radius:5px;padding:.15rem .4rem;min-width:11rem}" +
-    ".ed-imp .dest{display:flex;gap:1rem;margin:.5rem 0;color:var(--ink)} .ed-imp .dest label{flex-direction:row;gap:.3rem;align-items:center;color:var(--ink);font-size:13px;margin:0}" +
+    ".ed-imp .dest{display:flex;gap:1rem;margin:.5rem 0;color:var(--ink)} .ed-imp .dest label{flex-direction:row;gap:.3rem;align-items:center;color:var(--ink);font-size:13px;margin:0} .ed-imp .dest input{min-width:0;padding:0;margin:0}" +
     ".ed-imp button{font:inherit;border:1px solid var(--faint);background:var(--paper);color:var(--ink);border-radius:999px;padding:.15rem .8rem;cursor:pointer;margin-right:.3rem} .ed-imp button.go{background:var(--accent);color:var(--paper);border-color:var(--accent)}" +
-    ".ed-imp .ed-msg{color:var(--muted);margin-top:.3rem} .ed-imp .warn{color:var(--accent)}" +
+    ".ed-imp .ed-msg{color:var(--muted);margin-top:.3rem} .ed-imp .warn{color:var(--accent)} .ed-imp .book{margin-top:.3rem}" +
+    ".ed-imp .ed-pre{max-height:22rem;overflow:auto;background:var(--paper);border:1px solid var(--faint);border-radius:6px;padding:.5rem .7rem;font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;margin:.5rem 0 0}" +
+    ".ed-imp .up span{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:.15rem .8rem;cursor:pointer}" +
     ".ed-gone{text-decoration:line-through;opacity:.35} ::highlight(ed-para){background:var(--hl)}";
   document.head.appendChild(css);
 
@@ -103,11 +105,9 @@
           '</span><button data-a="undo" data-i="' + i + '">undo</button></li>';
       }).join("") + "</ul>";
     }
-    if (inbox.length) {
-      var waiting = inbox.filter(function (f) { return !f.imported.length; }).length;
-      h += '<div style="margin-top:.4rem">Inbox (library/additions): ' + inbox.length + " file" + (inbox.length === 1 ? "" : "s") +
-        (waiting ? ", " + waiting + " not imported" : "") + ' <button data-a="import">Import…</button></div>';
-    }
+    var waiting = inbox.filter(function (f) { return !f.imported.length; }).length;
+    h += '<div style="margin-top:.4rem">Inbox (library/additions): ' + inbox.length + " file" + (inbox.length === 1 ? "" : "s") +
+      (waiting ? ", " + waiting + " not imported" : "") + ' <button data-a="import">Import…</button></div>';
     h += '<div><button data-a="build"' + (running ? " disabled" : "") + ' title="Rebuild the site here to see the edits">Rebuild</button>' +
       '<button class="go" data-a="publish"' + (running ? " disabled" : "") + ' title="Rebuild, commit library/edits.tsv, push to GitHub, deploy to Cloudflare">Publish</button></div>';
     if (job && job.state !== "idle") {
@@ -196,46 +196,121 @@
   }, true);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
 
-  // ---- import: raw .md files in library/additions -> library/private or library/own -------------
+  // ---- import: files in library/additions (raw .md, PDF, EPUB) -> library/private or library/own ----
+  var LANGS = { eng: "English", lat: "Latin", grc: "Greek" };
   function loadInbox() {
     return fetch("/__edit/inbox").then(function (r) { return r.json(); })
       .then(function (list) { inbox = list; render(); return list; });
+  }
+  function slugName(s) {
+    return (s.trim().split(/\s+/).pop() || "eng").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "");
+  }
+  function fileRow(f, i) {
+    var opts = f.candidates.map(function (c) {
+      return '<option value="' + esc(c.id) + '"' + (c.id === f.work ? " selected" : "") + ">" + esc(c.title) +
+        (c.shelf ? "" : " (not on shelf)") + " · " + esc(c.id) + "</option>";
+    }).join("");
+    var book = f.kind === "book";
+    return '<div class="file" data-i="' + i + '"><b>' + esc(f.file) + "</b>" +
+      (book ? ' <span class="ed-msg">book: PDF/EPUB</span>' : "") +
+      (f.imported.length ? ' <span class="warn">already imported (' + esc(f.imported.join(", ")) + "): importing again replaces it</span>" : "") +
+      (book ? '<div class="book"><label>Part of the book<select name="part"><option value="">finding the verse…</option></select></label>' +
+        '<label>Pages<input name="pages" placeholder="e.g. 165-202" style="min-width:7rem"></label>' +
+        '<label>Language<select name="language">' + Object.keys(LANGS).map(function (k) {
+          return '<option value="' + k + '"' + (k === (f.language || "eng") ? " selected" : "") + ">" + LANGS[k] + "</option>";
+        }).join("") + "</select></label>" +
+        '<label title="Lines containing any of these (comma-separated) are left out: a critical apparatus, say">Leave out lines containing' +
+        '<input name="drop" value="||" style="min-width:6rem"></label></div>' : "") +
+      "<div>" +
+      '<label>Author<input name="author" value="' + esc(f.author) + '"></label>' +
+      '<label>Title<input name="title" value="' + esc(f.title) + '"></label>' +
+      '<label>' + (book ? "Translator or editor" : "Translator") + '<input name="edition" value="' + esc(f.edition) + '"></label>' +
+      '<label>Pairs with (original)<select name="work">' + (f.work ? "" : '<option value="">choose…</option>') + opts + "</select></label>" +
+      '<label>Text id<input name="id" value="' + esc(f.id) + '"></label>' +
+      "</div>" +
+      '<div class="dest"><label><input type="radio" name="dest-' + i + '" value="private" checked> Private (this computer)</label>' +
+      '<label><input type="radio" name="dest-' + i + '" value="own"> Library (published)</label></div>' +
+      (book ? '<button data-a="preview">Preview</button>' : "") +
+      '<button class="go" data-a="do-import">Import</button><span class="ed-msg ed-res"></span><pre class="ed-pre" hidden></pre></div>';
+  }
+  function loadParts(row, f) {
+    var sel = row.querySelector('[name="part"]');
+    fetch("/__edit/parts?file=" + encodeURIComponent(f.file)).then(function (r) { return r.json(); }).then(function (r) {
+      if (r.error) { sel.innerHTML = '<option value="">' + esc(r.error) + "</option>"; return; }
+      sel.innerHTML = r.parts.map(function (p) {
+        return '<option value="' + p.first + "-" + p.last + '" data-lang="' + p.language + '">pages ' + p.first + "–" + p.last +
+          " · " + (LANGS[p.language] || p.language) + " verse · lines " + p.start + "–" + p.verse + "</option>";
+      }).join("") + '<option value="">other pages (type them) · ' + r.pages + " pages in all</option>";
+      choosePart(row);
+    });
+  }
+  function choosePart(row) {
+    var sel = row.querySelector('[name="part"]'), o = sel.options[sel.selectedIndex];
+    if (!o || !o.value) return;
+    row.querySelector('[name="pages"]').value = o.value;
+    row.querySelector('[name="language"]').value = o.getAttribute("data-lang") || "eng";
+    fixId(row);
+  }
+  // the text id follows the chosen work: <work>.<translator's or editor's last name>, + language for an original
+  function fixId(row) {
+    var work = row.querySelector('[name="work"]').value;
+    if (!work) return;
+    var lang = row.querySelector('[name="language"]'), l = lang ? lang.value : "eng";
+    row.querySelector('[name="id"]').value = work + "." + slugName(row.querySelector('[name="edition"]').value) + (l !== "eng" ? "-" + l : "");
+  }
+  function fields(row, f) {
+    var val = function (n) { var el = row.querySelector('[name="' + n + '"]'); return el ? el.value : ""; };
+    return { file: f.file, author: val("author"), title: val("title"), edition: val("edition"), work: val("work"),
+             id: val("id"), language: val("language") || "eng", pages: val("pages"), drop: val("drop"),
+             dest: row.querySelector("input[type=radio]:checked").value };
+  }
+  function summary(rp) {
+    if ("notes_matched" in rp) {
+      return rp.verse_lines + " verse lines, numbered to " + rp.last_line + ", " + rp.notes_matched + " of " + rp.note_refs + " notes linked.";
+    }
+    return rp.verse_lines + " verse lines (" + rp.half_lines + " sharing a number), numbered to " + rp.last_line + "; " +
+      rp.numbered_in_book + " numbers taken from the book (" + rp.numbers_at + "); " + rp.speakers + " speakers, " +
+      rp.stage + " stage directions.";
+  }
+  function upload(files) {
+    var list = Array.prototype.slice.call(files || []);
+    return list.reduce(function (p, file) {
+      return p.then(function () {
+        return fetch("/__edit/upload?name=" + encodeURIComponent(file.name), { method: "POST", body: file })
+          .then(function (r) { return r.json(); })
+          .then(function (r) { if (r.error) alert(file.name + ": " + r.error); });
+      });
+    }, Promise.resolve());
   }
   function openImport() {
     var old = document.querySelector(".ed-imp");
     if (old) old.remove();
     var box = document.createElement("div");
     box.className = "ed-imp";
-    box.innerHTML = "<h3>Import into the library</h3><p class=\"ed-msg\">Raw Markdown files in <code>library/additions</code>. " +
-      "Each is formatted for the reader (speakers, stage directions, line numbers, notes) and saved under its id. " +
-      "<b>Private</b> texts are read on this computer only and are never committed or published: use it for translations " +
+    box.innerHTML = "<h3>Import into the library</h3><p class=\"ed-msg\">Files in <code>library/additions</code>: raw Markdown, " +
+      "or a book as PDF or EPUB. Each is formatted for the reader (speakers, stage directions, the book's line numbers) and saved " +
+      "under its id. For a book, pick the part that holds the text and check it with <b>Preview</b> first. " +
+      "<b>Private</b> texts are read on this computer only and are never committed or published: use it for anything " +
       "still in copyright. <b>Library</b> texts are published with the site.</p>" +
-      inbox.map(function (f, i) {
-        var opts = f.candidates.map(function (c) {
-          return '<option value="' + esc(c.id) + '"' + (c.id === f.work ? " selected" : "") + ">" + esc(c.title) +
-            (c.shelf ? "" : " (not on shelf)") + " · " + esc(c.id) + "</option>";
-        }).join("");
-        return '<div class="file" data-i="' + i + '"><b>' + esc(f.file) + "</b>" +
-          (f.imported.length ? ' <span class="warn">already imported (' + esc(f.imported.join(", ")) + "): importing again replaces it</span>" : "") +
-          "<div>" +
-          '<label>Author<input name="author" value="' + esc(f.author) + '"></label>' +
-          '<label>Title<input name="title" value="' + esc(f.title) + '"></label>' +
-          '<label>Translator<input name="edition" value="' + esc(f.edition) + '"></label>' +
-          '<label>Pairs with (original)<select name="work">' + (f.work ? "" : '<option value="">choose…</option>') + opts + "</select></label>" +
-          '<label>Text id<input name="id" value="' + esc(f.id) + '"></label>' +
-          "</div>" +
-          '<div class="dest"><label><input type="radio" name="dest-' + i + '" value="private" checked> Private (this computer)</label>' +
-          '<label><input type="radio" name="dest-' + i + '" value="own"> Library (published)</label></div>' +
-          '<button class="go" data-a="do-import">Import</button><span class="ed-msg"></span></div>';
-      }).join("") +
+      '<p><label class="up"><input type="file" accept=".md,.pdf,.epub" multiple hidden><span>Add a file…</span></label> ' +
+      '<span class="ed-msg">copies a .md, .pdf or .epub from anywhere on this computer into library/additions</span></p>' +
+      (inbox.length ? inbox.map(fileRow).join("") : '<p class="ed-msg">Nothing waiting.</p>') +
       '<div style="margin-top:.8rem"><button data-a="close">Close</button><button data-a="rebuild-after">Rebuild to see imports</button></div>';
     document.body.appendChild(box);
-    // the text id follows the chosen work: <work>.<translator's last name>
+    box.querySelectorAll(".file").forEach(function (row) {
+      var f = inbox[+row.getAttribute("data-i")];
+      if (f.kind === "book") loadParts(row, f);
+    });
+    box.querySelector(".up input").addEventListener("change", function (e) {
+      var span = box.querySelector(".up span");
+      span.textContent = "copying…";
+      upload(e.target.files).then(loadInbox).then(openImport);
+    });
     box.addEventListener("change", function (e) {
-      if (e.target.name !== "work") return;
-      var row = e.target.closest(".file"), idIn = row.querySelector('[name="id"]');
-      var tr = row.querySelector('[name="edition"]').value.trim().split(/\s+/).pop() || "eng";
-      idIn.value = e.target.value + "." + tr.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "");
+      var row = e.target.closest(".file");
+      if (!row) return;
+      if (e.target.name === "part") choosePart(row);
+      else if (e.target.name === "work" || e.target.name === "language") fixId(row);
     });
     box.addEventListener("click", function (e) {
       var b = e.target.closest("button[data-a]");
@@ -243,20 +318,23 @@
       var a = b.getAttribute("data-a");
       if (a === "close") { box.remove(); loadInbox(); return; }
       if (a === "rebuild-after") { box.remove(); post("/__edit/build").then(poll); return; }
-      if (a !== "do-import") return;
-      var row = b.closest(".file"), f = inbox[+row.getAttribute("data-i")], res = row.querySelector(".ed-msg");
-      var val = function (n) { return row.querySelector('[name="' + n + '"]').value; };
-      var dest = row.querySelector('input[type=radio]:checked').value;
-      if (dest === "own" && !confirm("Library texts are committed and published with the site. Is this text free to publish (public domain or your own)?")) return;
-      res.textContent = " importing…";
-      post("/__edit/import", { file: f.file, author: val("author"), title: val("title"), edition: val("edition"),
-                               work: val("work"), id: val("id"), dest: dest })
-        .then(function (r) {
-          if (r.error) { res.innerHTML = ' <span class="warn">' + esc(r.error) + "</span>"; return; }
-          var rp = r.report;
-          res.innerHTML = " saved to <code>" + esc(r.path) + "</code>: " + rp.verse_lines + " verse lines, numbered to " +
-            rp.last_line + ", " + rp.notes_matched + " of " + rp.note_refs + " notes linked.";
-        });
+      if (a !== "do-import" && a !== "preview") return;
+      var row = b.closest(".file"), f = inbox[+row.getAttribute("data-i")], res = row.querySelector(".ed-res");
+      var pre = row.querySelector(".ed-pre"), data = fields(row, f);
+      if (a === "do-import" && data.dest === "own" &&
+          !confirm("Library texts are committed and published with the site. Is this text free to publish (public domain or your own)?")) return;
+      res.textContent = a === "preview" ? " converting…" : " importing…";
+      post(a === "preview" ? "/__edit/preview" : "/__edit/import", data).then(function (r) {
+        if (r.error) { res.innerHTML = ' <span class="warn">' + esc(r.error) + "</span>"; return; }
+        if (a === "preview") {
+          res.textContent = " " + summary(r.report);
+          pre.textContent = r.preview + "\n\n… the end:\n" + r.tail;
+          pre.hidden = false;
+          return;
+        }
+        pre.hidden = true;
+        res.innerHTML = " saved to <code>" + esc(r.path) + "</code>: " + esc(summary(r.report));
+      });
     });
   }
 
