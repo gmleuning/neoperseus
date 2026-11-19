@@ -12,10 +12,61 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import edits as text_edits
+from . import importer
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
 RULES = ROOT / "library" / "edits.tsv"
+INBOX = ROOT / "library" / "additions"          # raw files waiting to be imported
+DEST = {"private": ROOT / "library" / "private", "own": ROOT / "library" / "own"}
+_catalog = None
+
+
+def catalog():
+    global _catalog
+    if _catalog is None:
+        from . import perseus
+        _catalog = perseus.load_catalog()
+    return _catalog
+
+
+def shelf():
+    d = ROOT / "library" / "perseus"
+    return {p.name for p in d.iterdir()} if d.is_dir() else set()
+
+
+def inbox():
+    """Raw .md files in library/additions (no library front matter), with guessed details."""
+    out = []
+    if not INBOX.is_dir():
+        return out
+    for p in sorted(INBOX.glob("*.md")):
+        head = p.read_text(encoding="utf-8", errors="replace")[:600]
+        if head.startswith("---") and "\nwork:" in head:
+            continue                       # already in the library format
+        g = importer.guess(p, catalog(), shelf())
+        done = [k for k, d in DEST.items() if (d / f"{g['id']}.md").exists()]
+        out.append({"file": p.name, **g, "imported": done})
+    return out
+
+
+def do_import(b):
+    src = INBOX / Path(b["file"]).name
+    if not src.is_file():
+        raise ValueError("file not found in library/additions")
+    dest = DEST.get(b.get("dest"))
+    if dest is None:
+        raise ValueError("destination must be private or own")
+    meta = {k: (b.get(k) or "").strip() for k in ("id", "work", "author", "title", "edition", "language")}
+    meta["language"] = meta["language"] or "eng"
+    meta["source"] = src.name
+    if not meta["work"] or not meta["id"]:
+        raise ValueError("work and id are needed")
+    md, report = importer.convert(src.read_text(encoding="utf-8"), meta)
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / f"{meta['id']}.md"
+    out.write_text(md, encoding="utf-8")
+    return {"ok": True, "path": str(out.relative_to(ROOT)).replace("\\", "/"), "report": report}
 EDIT_JS = ROOT / "assets" / "edit.js"
 INJECT = b'<script src="/__edit/edit.js"></script>\n</body>'
 
@@ -68,13 +119,16 @@ JOB = Job()
 PY = os.environ.get("PYTHON", "python")
 
 
-def build_steps():
-    return [("build", [PY, "perseus.py", "build"], False)]
+def build_steps(private=True):
+    """Here the site is built with library/private; Publish builds without it."""
+    return [("build", [PY, "perseus.py", "build"] + (["--private"] if private else []), False)]
 
 
 def publish_steps():
     def commit():
         subprocess.run(["git", "add", str(RULES.relative_to(ROOT))], cwd=ROOT, check=True)
+        if DEST["own"].is_dir():           # texts imported into the public library
+            subprocess.run(["git", "add", "library/own"], cwd=ROOT, check=True)
         if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT).returncode == 0:
             return "no new edits to commit"
         n = len(text_edits.Rules(RULES).rules)
@@ -83,9 +137,10 @@ def publish_steps():
         return "committed library/edits.tsv"
     shell = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "deploy.ps1"] \
         if os.name == "nt" else ["pwsh", "-File", "deploy.ps1"]
-    return build_steps() + [("commit", commit, False),
-                            ("git push", ["git", "push"], False),
-                            ("deploy to Cloudflare Pages", shell, False)]
+    return build_steps(private=False) + [("commit", commit, False),
+                                         ("git push", ["git", "push"], False),
+                                         ("deploy to Cloudflare Pages", shell, False)] + \
+        [("rebuild with private texts for this computer", s[1], True) for s in build_steps()]
 
 
 def publish_cli():
@@ -135,6 +190,8 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/__edit/status":
             return self.send_json(JOB.status())
+        if path == "/__edit/inbox":
+            return self.send_json(inbox())
         # pages: add the edit tools on the way out
         local = Path(self.translate_path(path))
         if local.is_dir():
@@ -165,6 +222,11 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/__edit/undo":
             rules.remove(b.get("id", ""), b.get("action", "delete"), b.get("anchor", ""))
             return self.send_json({"ok": True})
+        if path == "/__edit/import":
+            try:
+                return self.send_json(do_import(b))
+            except (ValueError, KeyError) as e:
+                return self.send_json({"error": str(e)}, 400)
         if path == "/__edit/build":
             return self.send_json({"started": JOB.start("Rebuild", build_steps())})
         if path == "/__edit/publish":

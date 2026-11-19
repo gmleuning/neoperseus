@@ -4,6 +4,7 @@
     python perseus.py remove tlg0006.tlg012   take it off the shelf (its downloaded and converted files are deleted)
     python perseus.py update                  fetch anything missing, convert, and rebuild the site
     python perseus.py build                   rebuild the site only (after editing your own texts)
+    python perseus.py build --private         ... with library/private too (for reading here; not deployable)
     python perseus.py edit                    edit texts in the browser (this computer only), then Publish
     python perseus.py publish                 rebuild, commit library/edits.tsv, push, deploy
     python perseus.py find euripides          search the catalog from the command line
@@ -39,7 +40,8 @@ def cmd_update(args, force=False):
 
 def cmd_build(args, catalog=None):
     catalog = catalog or perseus.load_catalog()
-    entries, report = builder.build(LIBRARY, SITE, catalog)
+    private = getattr(args, "private", False)
+    entries, report = builder.build(LIBRARY, SITE, catalog, include_private=private)
     flagged = [r for r in report if r[5] and r[3] / r[5] < 0.9 and not r[6]]
     approx = [r for r in report if r[6]]
     print(f"built {len(entries)} work(s) into {SITE}")
@@ -144,7 +146,9 @@ def main():
     p = sub.add_parser("remove"); p.add_argument("ids", nargs="+"); p.set_defaults(fn=cmd_remove)
     p = sub.add_parser("update"); p.add_argument("--force", action="store_true",
                                                  help="reconvert everything"); p.set_defaults(fn=cmd_update)
-    p = sub.add_parser("build"); p.set_defaults(fn=cmd_build)
+    p = sub.add_parser("build"); p.add_argument("--private", action="store_true",
+                                                help="include library/private (this computer only; cannot be deployed)")
+    p.set_defaults(fn=cmd_build)
     p = sub.add_parser("dictionaries"); p.set_defaults(fn=cmd_dictionaries)
     p = sub.add_parser("edit"); p.add_argument("--port", type=int, default=8790)
     p.add_argument("--no-browser", action="store_true"); p.set_defaults(fn=cmd_edit)

@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 # wrangler (Cloudflare deploy) cache
 .wrangler/
+# texts that may not be published (python perseus.py build --private reads them)
+library/private/

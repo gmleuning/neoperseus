@@ -531,10 +531,14 @@ def edition_head(meta, others, current, kind):
     return f"<div><b>{lang}</b> {html.escape(name)}</div>"
 
 
-def collect(lib_dir, edits=None):
+def collect(lib_dir, edits=None, include_private=False):
+    """library/private/ holds texts that may not be published (in copyright): read only for
+    a build on this computer (build --private), never for one that is deployed."""
     works = defaultdict(list)
     for p in sorted(lib_dir.rglob("*.md")):
         if p.name.startswith(("_", ".")) or p.name.upper() == "README.MD":
+            continue
+        if not include_private and p.relative_to(lib_dir).parts[0] == "private":
             continue
         meta, events, notes = library.parse(p, edits)
         if not meta.get("work"):
@@ -608,7 +612,7 @@ def write_search_data(site, wid, author, title, parts):
 EDITS = None          # the edit rules used by the last build (for reporting unmatched ones)
 
 
-def build(lib_dir, site, catalog=None, shelf_ids=()):
+def build(lib_dir, site, catalog=None, shelf_ids=(), include_private=False):
     # start clean so removed works leave no pages behind; the dictionary is kept (slow to rebuild)
     site.mkdir(parents=True, exist_ok=True)
     for child in site.iterdir():
@@ -624,7 +628,10 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
     rules = load_groups(ROOT / "catalog" / "groups.tsv")
     global EDITS
     EDITS = text_edits.Rules(lib_dir / "edits.tsv")
-    works = collect(lib_dir, EDITS.apply)
+    works = collect(lib_dir, EDITS.apply, include_private)
+    if include_private and (lib_dir / "private").is_dir():
+        # deploy.ps1 refuses to upload a site with this marker
+        (site / "_private").write_text("built with library/private: do not deploy\n", encoding="utf-8")
     index_entries, report, used = [], [], set()
     shelf_map = {}
     for wid, docs in sorted(works.items()):

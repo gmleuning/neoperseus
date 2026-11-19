@@ -116,6 +116,21 @@ To pair a translation with an original, give both files the same `work:` id and 
 citation keys. A translation of a Perseus work takes that work's id (for example
 `phi1276.phi001` for Juvenal's Satires) and pairs with the Perseus Latin automatically.
 
+## Importing texts
+
+Put raw Markdown (for example a play converted from an EPUB) in `library/additions/`, start
+`python perseus.py edit` and click **Import…** in the edit bar. Each file is formatted for the
+reader: introduction and cast list, speakers, stage directions, strophe headings, the
+translation's own line numbers (so it lines up with the original line by line), and textual
+notes linked from their ° marks. Check the guessed author, title, translator and the original
+it pairs with, then choose where it goes:
+
+- **Private** (`library/private/`): read on this computer only. The folder is not committed,
+  `python perseus.py build` leaves it out, edit mode and `build --private` include it, and
+  `deploy.ps1` refuses to upload a site built with it. Use this for translations in copyright.
+- **Library** (`library/own/`): committed and published with the site, for texts that are
+  free to publish.
+
 ## Editing texts
 
 ```powershell
@@ -140,6 +155,7 @@ perseus.py            the command
 reader/               tei.py (Perseus XML -> library), wikisource.py (EPUB -> library),
                       library.py (reads library files), build.py (library -> site),
                       edits.py (edit rules), editserver.py (python perseus.py edit),
+                      importer.py (raw Markdown -> library format),
                       perseus.py (catalog, shelf, download), dictionary.py (LSJ, Lewis & Short)
 assets/               style.css, settings.js, reader.js, dict.js, library.js, local.js,
                       search.js, catalog.js, edit.js (edit mode only), fonts/
@@ -149,6 +165,8 @@ shelf.txt             your reading list
 deploy.ps1            publishes site/ to Cloudflare Pages
 library/own/          your texts (committed)
 library/edits.tsv     text edits made in edit mode (committed)
+library/additions/    raw files waiting to be imported (Import… in edit mode)
+library/private/      imported texts for this computer only (not committed, never deployed)
 library/perseus/      converted Perseus texts (generated, not committed)
 corpus/               downloaded Perseus XML (generated, not committed)
 site/                 the built reader (generated, not committed); site/dict/ holds the
