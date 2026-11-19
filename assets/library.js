@@ -1,7 +1,8 @@
 // Library page (library.html): continue reading, authors on the left, the chosen author's works on the
-// right (grouped for authors with many works), and a finder across everything.
+// right (grouped for authors with many works), and a finder across everything. Texts kept on
+// this device (local.js) join the list through LibraryPage.setLocal.
 (function () {
-  var works = window.LIBRARY || [];
+  var base = window.LIBRARY || [], works = base;
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -28,14 +29,14 @@
   }
 
   // ---- continue reading ----------------------------------------------------------
-  var recent = [];
-  works.forEach(function (w) {
-    var p = position(w.href);
-    if (p && p.t) recent.push({ w: w, p: p });
-  });
-  recent.sort(function (a, b) { return b.p.t - a.p.t; });
-  if (recent.length) {
-    $("continue-wrap").hidden = false;
+  function renderContinue() {
+    var recent = [];
+    works.forEach(function (w) {
+      var p = position(w.href);
+      if (p && p.t) recent.push({ w: w, p: p });
+    });
+    recent.sort(function (a, b) { return b.p.t - a.p.t; });
+    $("continue-wrap").hidden = !recent.length;
     $("continue").innerHTML = recent.slice(0, 6).map(function (r) {
       return '<a href="' + esc(r.w.href) + "#" + esc(r.p.id) + '"><span class="c-au">' + esc(r.w.author) +
         '</span><span class="c-ti">' + esc(r.w.title) + '</span><span class="c-at">continue at ' +
@@ -45,15 +46,20 @@
 
   // ---- authors -------------------------------------------------------------------
   var authors = {}, order = [];
-  works.forEach(function (w) {
-    var a = authors[w.author_id];
-    if (!a) {
-      a = authors[w.author_id] = { id: w.author_id, name: w.author, lang: langOf(w), works: [] };
-      order.push(a);
-    }
-    a.works.push(w);
-  });
-  order.sort(function (a, b) { return fold(a.name) < fold(b.name) ? -1 : 1; });
+  function index() {
+    authors = {}; order = [];
+    works.forEach(function (w) {
+      var a = authors[w.author_id];
+      if (!a) {
+        a = authors[w.author_id] = { id: w.author_id, name: w.author, lang: langOf(w), works: [] };
+        order.push(a);
+      }
+      a.works.push(w);
+    });
+    order.sort(function (a, b) { return fold(a.name) < fold(b.name) ? -1 : 1; });
+  }
+  renderContinue();
+  index();
 
   var lang = "all", current = null;
   var LANG_HEAD = { grc: "Greek", lat: "Latin", other: "Other" };
@@ -83,7 +89,10 @@
       ? '<span class="who">' + esc(w.translations.filter(Boolean).join(", ")) + "</span>" : "";
     var where = p ? '<a class="where" href="' + esc(w.href) + "#" + esc(p.id) + '">continue at ' + esc(p.key) + "</a>" : "";
     var au = showAuthor ? '<span class="au-tag">' + esc(w.author) + "</span>" : "";
-    return '<li><a href="' + esc(w.href) + '">' + esc(w.title) + "</a>" + orig + au + who + where + "</li>";
+    var dev = w.local ? '<span class="dev">on this device' + (w.uploads && w.uploads.length
+      ? ' <button type="button" class="linkish" data-remove="' + esc(w.uploads.join("|")) + '" title="Remove from this browser">remove</button>'
+      : "") + "</span>" : "";
+    return '<li><a href="' + esc(w.href) + '">' + esc(w.title) + "</a>" + orig + au + who + dev + where + "</li>";
   }
 
   function renderAuthor(id) {
@@ -152,6 +161,22 @@
     renderAuthor(keep ? current : (visible[0] && visible[0].id));
     if (!visible.length) { renderAuthors(null); $("works").innerHTML = '<p class="empty">Nothing here yet.</p>'; }
   });
+
+  function refreshView() {
+    var q = $("find").value.trim();
+    if (q) return renderFind(q);
+    var visible = order.filter(function (a) { return lang === "all" || a.lang === lang; });
+    var keep = visible.some(function (a) { return a.id === current; });
+    if (visible.length) renderAuthor(keep ? current : visible[0].id);
+  }
+  window.LibraryPage = {
+    setLocal: function (list) {
+      works = base.concat(list || []);
+      renderContinue();
+      index();
+      refreshView();
+    }
+  };
 
   if (!order.length) {
     $("works").innerHTML = '<p class="empty">The shelf is empty. Add a text with <code>python perseus.py add ID</code>; ' +

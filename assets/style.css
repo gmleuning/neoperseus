@@ -340,6 +340,19 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
 .works .au-tag { color: var(--muted); font-size: .85rem; }
 .empty { color: var(--muted); font-style: italic; }
 
+/* texts on this device */
+.local { margin: 0 0 1.6rem; }
+.local-row { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
+.local-row label.icon-btn { cursor: pointer; }
+#local-status { color: var(--muted); font-size: .9rem; margin-right: auto; }
+#local-status b { color: var(--ink); font-weight: 500; }
+#local-status .note { color: var(--accent); }
+.local-note { color: var(--muted); font-size: .82rem; margin: .4rem 0 0; }
+.local-note a { color: var(--accent); }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; text-decoration: underline dotted; }
+.works .dev { color: var(--accent); font-size: .8rem; }
+body.dropping { outline: 3px dashed var(--accent); outline-offset: -10px; }
+
 /* ---- catalog ------------------------------------------------------ */
 .filters { display: flex; flex-wrap: wrap; gap: .6rem 1.4rem; align-items: center; margin-bottom: .6rem; }
 .filters input[type="search"], .filters input[type="text"] {
@@ -381,6 +394,16 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
   .shelf { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .authors { position: static; max-height: 14rem; border-right: 0; border-bottom: 1px solid var(--faint); padding: 0 0 .6rem; }
 }
+/* ---- compare: a translation either side of the original ---------------- */
+.heads.three, .grp.three { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); column-gap: 2rem; }
+.heads.three > div:first-child { padding-left: 0; }
+.heads.three > div:nth-child(2) { padding-left: 2.8rem; }
+body.tight .grp.three .col.e > .ch, body.tight .grp.three .col.e > .notes { grid-column: 1; }
+body.tight .grp.three .col.g > .ch, body.tight .grp.three .col.g > .notes { grid-column: 2; }
+body.tight .grp.three .col.f > .ch, body.tight .grp.three .col.f > .notes { grid-column: 3; }
+html.cols-stack .grp.three, html.cols-orig .grp.three, html.cols-trans .grp.three { grid-template-columns: minmax(0, 46rem); }
+html.cols-stack .grp.three .col.g { order: -1; }
+
 @media (max-width: 720px) {
   :root { --fs: 16px; }
   .bar { gap: .6rem; padding: 0 1rem; }
@@ -393,6 +416,12 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
   body.tight .col.g > .ch { grid-column: 1; grid-row: calc(var(--r) * 2 - 1); }
   body.tight .col.e > .ch { grid-column: 1; grid-row: calc(var(--r) * 2); border-top: 0; margin-top: 0; padding-top: .15rem; }
   body.tight .col.e > .notes, body.tight .col.g > .notes { grid-column: 1; grid-row: calc(var(--r) * 2); }
+  .grp.three { grid-template-columns: minmax(0, 1fr); }
+  .grp.three .col.g { order: -1; }
+  body.tight .grp.three .col.g > .ch { grid-column: 1; grid-row: calc(var(--r) * 3 - 2); }
+  body.tight .grp.three .col.e > .ch { grid-column: 1; grid-row: calc(var(--r) * 3 - 1); }
+  body.tight .grp.three .col.f > .ch { grid-column: 1; grid-row: calc(var(--r) * 3); }
+  body.tight .grp.three .col > .notes { grid-column: 1; grid-row: calc(var(--r) * 3); }
   .sec h2 .t { font-size: 1.6rem; }
   .cat th:nth-child(3), .cat td:nth-child(3) { display: none; }
   .lib { padding: 1.4rem 1rem 4rem; }
@@ -414,5 +443,5 @@ body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
 .landing .land-top .icon-btn { color: #e9dfd6; border-color: rgba(255,255,255,.3); background: rgba(0,0,0,.25); }
 .landing .hero { position: relative; margin: auto 0 0; padding: 0 1.6rem 3.2rem; max-width: 46rem; margin-left: clamp(0rem, 6vw, 6rem); }
 .landing h1 { font-family: var(--gk); font-weight: 400; font-size: clamp(2.8rem, 8vw, 5.4rem); line-height: 1.05; margin: 0; letter-spacing: .01em; text-shadow: 0 2px 28px rgba(0,0,0,.6); }
-.landing .sub { font-size: 1.25rem; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: .4rem 0 0; }
+.landing .sub { font-style: normal; font-size: 1.25rem; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: .4rem 0 0; }
 .landing .land-foot { position: relative; padding: 0 1.6rem 1rem; color: #9d948b; font-size: .75rem; }

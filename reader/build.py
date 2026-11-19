@@ -132,12 +132,13 @@ def split_single(events):
 
 
 def sections_and_groups(chunks):
-    """Sections start at ## headings on the left; blocks start at speeches/paragraphs."""
+    """Sections start at ## headings on the left; blocks start at speeches/paragraphs.
+    Each chunk is (left, right, ...) with any number of right-hand sides."""
     sections = []
     cur_sec = {"title": None, "groups": []}
     group, glen = [], 0
-    for lch, rch in chunks:
-        lch, rch = list(lch), list(rch)
+    for ch in chunks:
+        lch, rest = list(ch[0]), [list(r) for r in ch[1:]]
         lead = [e for e in lch[:4] if e[0] == "h2"]
         if lead:
             if group:
@@ -145,20 +146,42 @@ def sections_and_groups(chunks):
             if cur_sec["groups"] or cur_sec["title"]:
                 sections.append(cur_sec)
             lch.remove(lead[0])
-            rch = [e for i, e in enumerate(rch) if not (e[0] == "h2" and i < 4)]
+            rest = [[e for i, e in enumerate(r) if not (e[0] == "h2" and i < 4)] for r in rest]
             cur_sec = {"title": lead[0][1], "groups": []}
             group, glen = [], 0
         starts_block = bool(lch) and lch[0][0] in ("h3", "spk", "stage", "pb")
         if group and ((starts_block and glen >= GROUP_MIN) or glen >= GROUP_MAX):
             cur_sec["groups"].append(group)
             group, glen = [], 0
-        group.append((lch, rch))
+        group.append((lch, *rest))
         glen += text_len(lch)
     if group:
         cur_sec["groups"].append(group)
     if cur_sec["groups"] or cur_sec["title"]:
         sections.append(cur_sec)
     return sections
+
+
+def chunk3(left, a, b):
+    """Split the original and two translations at numbers all three share."""
+    pa, _ = shared_keys(left, a)
+    pb = {k: ri for _, ri, k in shared_keys(left, b)[0]}
+    bounds = [(0, 0, 0)]
+    for li, ra, k in pa:
+        if k not in pb:
+            continue
+        rb = pb[k]
+        if li <= bounds[-1][0] or ra <= bounds[-1][1] or rb <= bounds[-1][2]:
+            continue
+        lp = back_over_struct(left, li, bounds[-1][0])
+        ap = back_over_struct(a, ra, bounds[-1][1])
+        bp = back_over_struct(b, rb, bounds[-1][2])
+        lp = li if lp <= bounds[-1][0] else lp
+        ap = ra if ap <= bounds[-1][1] else ap
+        bp = rb if bp <= bounds[-1][2] else bp
+        bounds.append((lp, ap, bp))
+    bounds.append((len(left), len(a), len(b)))
+    return [(left[l0:l1], a[a0:a1], b[b0:b1]) for (l0, a0, b0), (l1, a1, b1) in zip(bounds, bounds[1:])]
 
 
 # ---- verse translations with their own line numbers ---------------------------------
@@ -390,11 +413,68 @@ def render_page(orig, trans, page_info):
     return "".join(body), toc, stats, has_app, (levents, revents or [])
 
 
+def fold_extra(lch, rch, inner):
+    """Material only the translation has (an argument, a preface) is folded away."""
+    if text_len(lch) == 0 and text_len(rch) > 600:
+        first_text = next((i for i, e in enumerate(rch) if e[0] == "text"), len(rch))
+        heads = [e[1] for e in rch[:first_text] if e[0] == "h3"]
+        label = heads[-1].rstrip(".") if heads else "Translator’s introduction"
+        return f'<details class="aside"><summary>{label}</summary>{inner}</details>'
+    return inner
+
+
+def render_compare(orig, ta, tb):
+    """Original in the middle, one translation either side, synced on the numbers all share."""
+    lmeta, levents, lnotes = orig
+    sides = []
+    for meta, events, notes in (ta, tb):
+        if own_lineation(levents, events, lmeta, meta):
+            events = remap_translation(levents, events)
+        sides.append((meta, events, notes))
+    sections = sections_and_groups(chunk3(levents, sides[0][1], sides[1][1]))
+    L = Side("L", lmeta.get("layout", "prose"), lnotes)
+    A = Side("E", sides[0][0].get("layout", "prose"), sides[0][2])
+    B = Side("F", sides[1][0].get("layout", "prose"), sides[1][2])
+
+    def lang(m):
+        return HTML_LANG.get(m.get("language"), "en")
+
+    body, toc = [], []
+    for si, sec in enumerate(sections, 1):
+        all_left = [e for g in sec["groups"] for ch in g for e in ch[0]]
+        k0, k1 = first_key(all_left), last_key(all_left)
+        rng = f"{last_part(k0)}–{last_part(k1)}" if k0 and k1 and k0 != k1 else (last_part(k0) if k0 else "")
+        sid = f"s{si}"
+        if sec["title"]:
+            toc.append(f'<li><a href="#{sid}"><span class="t">{sec["title"]}</span>'
+                       f'<span class="r">{html.escape(rng)}</span></a></li>')
+        head = (f'<h2><span class="t">{sec["title"]}</span><span class="r">{html.escape(rng)}</span></h2>'
+                if sec["title"] else "")
+        groups = []
+        for g in sec["groups"]:
+            lc, ac, bc = [], [], []
+            for r, (lch, ach, bch) in enumerate(g, 1):
+                lc.append(f'<div class="ch" style="--r:{r}">{L.render(lch)}</div>')
+                ac.append(f'<div class="ch" style="--r:{r}">{fold_extra(lch, ach, A.render(ach))}</div>')
+                bc.append(f'<div class="ch" style="--r:{r}">{fold_extra(lch, bch, B.render(bch))}</div>')
+            last = len(g) + 1
+            groups.append(
+                f'<div class="grp three">'
+                f'<div class="col e {A.layout}" lang="{lang(sides[0][0])}">{"".join(ac)}{A.notes_html(last)}</div>'
+                f'<div class="col g {L.layout}" lang="{lang(lmeta)}">{"".join(lc)}'
+                f'{L.notes_html(last).replace(chr(34) + "notes" + chr(34), chr(34) + "notes left" + chr(34))}</div>'
+                f'<div class="col e f {B.layout}" lang="{lang(sides[1][0])}">{"".join(bc)}{B.notes_html(last)}</div>'
+                f'</div>')
+        body.append(f'<section class="sec" id="{sid}">{head}{"".join(groups)}</section>')
+    has_app = any(k.startswith("a") for k in lnotes)
+    return "".join(body), toc, has_app
+
+
 # ---- site --------------------------------------------------------------------------
 def page_html(title, author, work_title, heads, toc, content, has_two, has_app, page_key, work_id,
-              lang, depth=1):
+              lang, depth=1, extra_tools="", heads_cls=None):
     up = "../" * depth
-    tools = []
+    tools = [extra_tools] if extra_tools else []
     if has_two:
         tools.append('<div class="seg" role="group" aria-label="Alignment">'
                      '<button type="button" data-mode="speech">Blocks</button>'
@@ -410,7 +490,7 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
     toc_html = (f'<nav class="toc"><details open><summary>Contents</summary><ol>{"".join(toc)}</ol>'
                 f'</details></nav>') if toc else ""
     layout_cls = "layout" if toc else "layout notoc"
-    heads_cls = "heads" if has_two else "heads one"
+    heads_cls = heads_cls or ("heads" if has_two else "heads one")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -529,8 +609,8 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
         if child.name == "dict":
             continue
         shutil.rmtree(child) if child.is_dir() else child.unlink()
-    for name in ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "catalog.js", "search.js",
-                 "beacon.jpg"):
+    for name in ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "catalog.js",
+                 "search.js", "beacon.jpg"):
         if (ASSETS / name).exists():
             shutil.copy(ASSETS / name, site / name)
     shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
@@ -552,6 +632,12 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
         used.add(f"{slug(author)}/{base}")
 
         hrefs = {}
+        compare = {}            # (a, b) -> the first original between translations a and b
+        if len(translations) >= 2:
+            for a in range(len(translations)):
+                for b in range(len(translations)):
+                    if a != b:
+                        compare[(a, b)] = f"{base}.compare-{a}-{b}.html"
         for oi, o in enumerate(originals):
             for ti, t in enumerate(translations or [None]):
                 suffix = "" if oi == 0 and ti == 0 else f".{oi}-{ti}"
@@ -565,9 +651,14 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
                                      href, "Original edition")
                 rhead = edition_head(t[0], [(x[0], hrefs[(oi, i)]) for i, x in enumerate(translations)],
                                      href, "Translation") if t else ""
+                cmp_link = ""
+                if compare:
+                    other = next(i for i in range(len(translations)) if i != ti)
+                    cmp_link = (f'<a class="icon-btn" href="{compare[(ti, other)]}" '
+                                f'title="Two translations either side of the original">Compare</a>')
                 page = page_html(f"{title} — {author}", author, title, lhead + rhead, toc, content,
                                  t is not None, has_app, f"{slug(author)}/{href}", wid,
-                                 m0.get("language", ""))
+                                 m0.get("language", ""), extra_tools=cmp_link)
                 out = site / slug(author) / href
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(page, encoding="utf-8")
@@ -585,6 +676,22 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
                     search_parts.append({"href": page_href, "side": "E", "lang": t[0].get("language", ""),
                                          "ed": t[0].get("edition") or t[0].get("label", ""),
                                          "segs": segments(final[1])})
+        for (a, b), href in compare.items():
+            content, toc, has_app = render_compare(originals[0], translations[a], translations[b])
+            ahead = edition_head(translations[a][0], [(x[0], compare.get((i, b), href))
+                                                      for i, x in enumerate(translations) if i != b],
+                                 href, "Left translation")
+            mhead = edition_head(originals[0][0], [], href, "Original edition")
+            bhead = edition_head(translations[b][0], [(x[0], compare.get((a, i), href))
+                                                      for i, x in enumerate(translations) if i != a],
+                                 href, "Right translation")
+            back = (f'<a class="icon-btn" href="{hrefs[(0, a)]}" title="Back to one translation">'
+                    f'One translation</a><a class="icon-btn" href="{compare[(b, a)]}" '
+                    f'title="Swap the two translations">Swap sides</a>')
+            page = page_html(f"{title} — {author} (compare)", author, title, ahead + mhead + bhead, toc,
+                             content, True, has_app, f"{slug(author)}/{href}", wid, m0.get("language", ""),
+                             extra_tools=back, heads_cls="heads three")
+            (site / slug(author) / href).write_text(page, encoding="utf-8")
         write_search_data(site, wid, author, title, search_parts)
         author_id = wid.split(".")[0] if not m0.get("own") else slug(author)
         desc = m0.get("description", "")
@@ -604,6 +711,7 @@ def build(lib_dir, site, catalog=None, shelf_ids=()):
         if e["own"]:
             e["author_id"] = ids.get(e["author"], e["author_id"])
     write_landing(site, index_entries)
+    write_local_page(site)
     write_library(site, index_entries)
     write_catalog(site, catalog, {e["work"] for e in index_entries})
     write_search_page(site, index_entries)
@@ -650,12 +758,40 @@ def write_library(site, entries):
 <div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
 <div class="chips" id="langs" role="group" aria-label="Language">
 <button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button></div></div>
+<section class="local" id="local" hidden><h3 class="label">On this device</h3>
+<div class="local-row"><span id="local-status"></span>
+<button type="button" class="icon-btn" id="local-link">Link a folder</button>
+<label class="icon-btn">Add .md files<input type="file" id="local-files" accept=".md,.markdown,.txt,text/markdown" multiple hidden></label></div>
+<p class="local-note">Your own texts, in the <a href="https://github.com/gmleuning/neoperseus/blob/main/SPEC.md">library format</a>, read in this browser only and never uploaded. You can also drop .md files anywhere on this page.</p></section>
 <div class="shelf"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
 <noscript><p>The library list needs JavaScript.</p></noscript>
 </main>"""
     (site / "library.html").write_text(
-        html_page("Library", "index", main, ["library.js"], f"<script>window.LIBRARY = {data};</script>"),
+        html_page("Library", "index", main, ["library.js", "local.js"], f"<script>window.LIBRARY = {data};</script>"),
         encoding="utf-8")
+
+
+def write_local_page(site):
+    """local.html: the reader shell for a text kept on this device; local.js fills it in."""
+    page = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On this device</title>
+<script src="settings.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="local-page" data-root="">
+<header class="bar"><a class="home brand" href="index.html" lang="grc" title="The Mandate of Fire">Θεσμὸς Πυρός</a><a class="home" href="library.html">Library</a>
+<div class="title"><span class="au"></span> <span class="wk"></span></div>
+<div class="tools"></div></header>
+<div class="layout notoc"><main><p class="empty">Opening…</p></main></div>
+<script src="local.js"></script>
+</body>
+</html>
+"""
+    (site / "local.html").write_text(page, encoding="utf-8")
 
 
 def write_landing(site, entries):

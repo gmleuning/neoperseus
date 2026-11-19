@@ -40,6 +40,12 @@ Then open `site/index.html`, the landing page (*Θεσμὸς Πυρός*, the M
   works on the right. Authors with many works are grouped (Cicero: speeches, rhetoric,
   philosophy, letters); the rules are in `catalog/groups.tsv` and can be edited. The box at the
   top finds works and authors across the shelf.
+- **Compare**: works with two or more English translations get a *Compare* button that puts
+  one translation either side of the original, synced on the numbers all three share.
+- **On this device** (library page): link a folder of your own `.md` texts (Chrome and Edge
+  remember it and re-read it each visit) or add/drop files (any browser). They are parsed and
+  shown in the browser by `local.js`, listed under their authors, and never leave the device.
+  Files without front matter open too, as an English text named after the file.
 - **Search texts**: words or phrases across the shelf, one author or one work, in the original,
   the translation or both. Accents, breathings, case, final sigma, u/v and i/j are ignored.
   "All forms of a Greek word" finds every inflected form (λόγος finds λόγου, λόγῳ, λόγοις…).
