@@ -16,6 +16,9 @@ corpus/catalog/1_checkstage/
 # ---- downloaded material: the Perseus XML and the dictionary sources (re-downloadable, over 700 MB)
 corpus/dictionary/
 
+# ---- work-in-progress product
+assets/work
+
 # ---- large originals and licensed files
 assets/images/JMW Turner*
 assets/images/Turner Beacon Light.png
