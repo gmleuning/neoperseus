@@ -1,5 +1,5 @@
 """Build the static site from the library: one page per original/translation pairing,
-an index of the shelf, a catalog page, and a sync report."""
+an index of the library, a catalog page, and a sync report."""
 import bisect
 import hashlib
 import html
@@ -10,7 +10,6 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
-from . import edits as text_edits
 from . import library, paths
 
 ROOT = paths.ROOT
@@ -562,7 +561,7 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
 {content}
 </main></div>
 <script src="{up}reader.js"></script>
-<script src="{up}shelf.js"></script>
+<script src="{up}work_pages.js"></script>
 <script src="{up}dict.js"></script>
 </body>
 </html>
@@ -581,7 +580,7 @@ def edition_head(meta, others, current, kind):
     return f"<div><b>{lang}</b> {html.escape(name)}</div>"
 
 
-# ---- groups for authors with many works (corpus/catalog/groups.tsv) ----------------------
+# ---- groups for authors with many works (corpus/library/groups.tsv) ----------------------
 def load_groups(path):
     rules = defaultdict(list)
     if path.exists():
@@ -641,7 +640,6 @@ def write_search_data(site, wid, author, title, parts):
     (d / f"{slug(wid)}.js").write_text(js, encoding="utf-8")
 
 
-EDITS = None          # the edit rules used by the last build (for reporting unmatched ones)
 STATE_DIR = paths.SITE_CACHE
 CODE_FILES = ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "search.js")
 IMAGE_FILES = ("beacon.jpg", "beacon-tall.jpg")
@@ -651,7 +649,7 @@ IMAGE_FILES = ("beacon.jpg", "beacon-tall.jpg")
 def fingerprint():
     """Changes whenever the code that makes the pages changes: then every page is made again."""
     h = hashlib.sha1()
-    for n in ("build.py", "library.py", "edits.py"):
+    for n in ("build.py", "library.py"):
         h.update((Path(__file__).parent / n).read_bytes())
     return h.hexdigest()[:16]
 
@@ -686,7 +684,7 @@ def scan(lib_dir, include_private=False):
         if not meta.get("work"):
             continue
         meta.setdefault("id", p.stem)
-        meta["own"] = top == "own"
+        meta["non_perseus"] = top != "perseus"          # a text that did not come from Perseus
         works[meta["work"]].append({"path": p, "rel": p.relative_to(lib_dir).as_posix(), "meta": meta,
                                     "sha": digest, "private": top == "private"})
     return works
@@ -724,20 +722,17 @@ def work_key(fp, wid, base, docs):
     for d in sorted(docs, key=lambda d: d["rel"]):
         h.update(d["rel"].encode("utf-8"))
         h.update(d["sha"].encode("ascii"))
-        for r in EDITS.for_id(d["meta"]["id"]):
-            h.update(repr(r).encode("utf-8"))
     return h.hexdigest()
 
 
 # ---- one work -> its pages, search data, index entry -------------------------------------------------------
 def render_work(site, wid, docs, base):
     """Write every page of one work under `site`. Returns what the site needs to remember about it."""
-    before = set(EDITS.used)
     parsed = []
     for d in docs:
-        meta, events, notes = library.parse(d["path"], EDITS.apply)
+        meta, events, notes = library.parse(d["path"])
         meta.setdefault("id", d["path"].stem)
-        meta["own"] = d["meta"]["own"]
+        meta["non_perseus"] = d["meta"]["non_perseus"]
         parsed.append((meta, events, notes))
     originals = sorted([d for d in parsed if is_original(d[0])], key=lambda d: d[0]["id"])
     translations = sorted([d for d in parsed if not is_original(d[0])], key=lambda d: d[0]["id"])
@@ -821,12 +816,11 @@ def render_work(site, wid, docs, base):
         "label": m0.get("label", ""), "href": f"{slug(author)}/{hrefs[(0, 0)]}",
         "translations": [d[0].get("edition") or d[0].get("label", "") for d in translations],
         "lang": m0.get("language", ""), "orig": m0.get("original") or m0.get("language", ""),
-        "own": bool(m0.get("own")),
+        "non_perseus": bool(m0.get("non_perseus")),
         "search": f"search/{slug(wid)}.js",
     }
     return {"files": files, "entry": entry, "base": base, "desc": m0.get("description", ""),
-            "shelf": f"{slug(author)}/{hrefs[(0, 0)]}", "report": report,
-            "used_rules": [list(r) for r in EDITS.used - before]}
+            "page": f"{slug(author)}/{hrefs[(0, 0)]}", "report": report}
 
 
 # ---- the persistent site: only works that changed are made again --------------------------------------------
@@ -870,8 +864,6 @@ def make_site(site, name, plan, fp, stats, keep=()):
         key = work_key(fp, wid, base, docs)
         old = state["works"].get(wid)
         if old and old["key"] == key and all((site / f).exists() for f in old["files"]):
-            for r in old["used_rules"]:
-                EDITS.used.add(tuple(r))
             results[wid] = old
             stats["cached"] += 1
             continue
@@ -892,22 +884,22 @@ def make_site(site, name, plan, fp, stats, keep=()):
 
 def assemble(results, rules):
     """The index entries, share map and sync rows for the pages that are on a site."""
-    entries, shelf, report = [], {}, []
+    entries, work_pages, report = [], {}, []
     for wid in sorted(results):
         r = results[wid]
         e = dict(r["entry"])
-        author_id = wid.split(".")[0] if not e["own"] else slug(e["author"])
+        author_id = wid.split(".")[0] if not e["non_perseus"] else slug(e["author"])
         e["author_id"] = author_id
         e["group"] = group_of(rules, author_id, e["title"], r["desc"])
         entries.append(e)
-        shelf[wid] = r["shelf"]
+        work_pages[wid] = r["page"]
         report += [tuple(x) for x in r["report"]]
     # your own texts sit under the same author as the Perseus ones when the names agree
-    ids = {e["author"]: e["author_id"] for e in entries if not e["own"]}
+    ids = {e["author"]: e["author_id"] for e in entries if not e["non_perseus"]}
     for e in entries:
-        if e["own"]:
+        if e["non_perseus"]:
             e["author_id"] = ids.get(e["author"], e["author_id"])
-    return entries, shelf, report
+    return entries, work_pages, report
 
 
 def copy_assets(site, extra=()):
@@ -921,17 +913,15 @@ def copy_assets(site, extra=()):
                     ignore=shutil.ignore_patterns("PPEditorialNew*"))      # a licensed font that is not published
 
 
-def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=None, stats=None):
+def build(lib_dir, site, catalog=None, public=False, local_site=None, stats=None):
     """The public site (`site`, what gets deployed) and, unless public=True, the local overlay (`local_site`):
     the catalog, the private texts, and the library and search pages that list them. The edit server serves the
     overlay first and `site` for everything else. Both are persistent: a page is only made again when the text it
-    comes from, its edit rules, or the page code has changed."""
-    global EDITS
+    comes from or the page code has changed."""
     stats = stats if stats is not None else {}
     stats.update({"cached": 0, "made": 0, "removed": 0})
     fp = fingerprint()
     rules = load_groups(paths.GROUPS_TSV)
-    EDITS = text_edits.Rules(lib_dir / "edits.tsv")
 
     # 1. the public site: every work, without library/private
     public_works = scan(lib_dir, include_private=False)
@@ -939,12 +929,12 @@ def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=No
     copy_assets(site)
     for stale in ("_local", "_private", "_sync.md", "catalog.html", "catalog.js"):     # from the older layout
         (site / stale).unlink(missing_ok=True)
-    entries, shelf, report = assemble(pub, rules)
+    entries, work_pages, report = assemble(pub, rules)
     write_landing(site, entries)
     write_local_page(site)
     write_library(site, entries, local=False)
     write_search_page(site, entries, local=False)
-    (site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf, ensure_ascii=False) + ";\n", encoding="utf-8")
+    (site / "work_pages.js").write_text("window.WORK_PAGES = " + json.dumps(work_pages, ensure_ascii=False) + ";\n", encoding="utf-8")
     if public or local_site is None:
         return entries, report
 
@@ -956,13 +946,13 @@ def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=No
     loc = make_site(local_site, "local", plan, fp, stats)
     merged = {w: r for w, r in pub.items() if w not in loc}
     merged.update(loc)
-    entries, shelf, report = assemble(merged, rules)
+    entries, work_pages, report = assemble(merged, rules)
     local_site.mkdir(parents=True, exist_ok=True)
     shutil.copy(paths.SITE_CODE / "catalog.js", local_site / "catalog.js")
     write_library(local_site, entries, local=True)
     write_search_page(local_site, entries, local=True)
     write_catalog(local_site, catalog, {e["work"] for e in entries})
-    (local_site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf, ensure_ascii=False) + ";\n", encoding="utf-8")
+    (local_site / "work_pages.js").write_text("window.WORK_PAGES = " + json.dumps(work_pages, ensure_ascii=False) + ";\n", encoding="utf-8")
     write_report(local_site, report)
     return entries, report
 
@@ -1009,7 +999,7 @@ def write_library(site, entries, local=False):
 <div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
 <div class="chips" id="langs" role="group" aria-label="Language">
 <button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button></div></div>
-<div class="shelf"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
+<div class="library-grid"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
 <noscript><p>The library list needs JavaScript.</p></noscript>
 </main>"""
     (site / "library.html").write_text(
@@ -1108,31 +1098,31 @@ def write_search_page(site, entries, local=False):
         encoding="utf-8")
 
 
-def catalog_rows(catalog, on_shelf):
+def catalog_rows(catalog, in_library):
     """One row per work in any public-domain repository we list: Perseus (corpus/catalog/catalog.json) and
-    Wikisource pairs (corpus/catalog/wikisource.json, made by tools/wikisource_catalog.py).
-    [id, author, title, original title, languages, English editions, on shelf, source]"""
+    Wikisource pairs (corpus/catalog/sources/wikisource.json, made by tools/wikisource_catalog.py).
+    [id, author, title, original title, languages, English editions, in the library, source]"""
     rows = []
     for w in (catalog or {}).get("works", []):
         langs = sorted({e["lang"] for e in w["editions"]})
         orig = next((e["label"] for e in w["editions"] if e["lang"] in ORIGINAL), "")
         trans = [e["description"] for e in w["editions"] if e["lang"] == "eng"]
         rows.append([w["id"], catalog["authors"].get(w["author"], w["author"]), w["title"], orig,
-                     "+".join(langs), len(trans), 1 if w["id"] in on_shelf else 0, "perseus"])
+                     "+".join(langs), len(trans), 1 if w["id"] in in_library else 0, "perseus"])
     ws = paths.WIKISOURCE_JSON
     if ws.exists():
         for w in json.loads(ws.read_text(encoding="utf-8"))["works"]:
             work = w["id"].rsplit(".", 1)[0]
             rows.append([w["id"], "", w["en_title"], w["orig_title"], "eng+" + w["lang"], 1,
-                         1 if work in on_shelf else 0, "wikisource"])
+                         1 if work in in_library else 0, "wikisource"])
     return rows
 
 
 SOURCES = [["perseus", "Perseus Digital Library"], ["wikisource", "Wikisource"]]
 
 
-def write_catalog(site, catalog, on_shelf):
-    rows = catalog_rows(catalog, on_shelf)
+def write_catalog(site, catalog, in_library):
+    rows = catalog_rows(catalog, in_library)
     if not rows:
         return
     data = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
@@ -1146,11 +1136,11 @@ this catalog is not part of the public site.)</p>
 <div class="local-row"><span id="local-status"></span>
 <button type="button" class="icon-btn" id="local-link">Link a folder</button>
 <label class="icon-btn">Add .md files<input type="file" id="local-files" accept=".md,.markdown,.txt,text/markdown" multiple hidden></label></div>
-<p class="local-note">Your own texts, in the <a href="https://github.com/gmleuning/neoperseus/blob/main/SPEC.md">library format</a>, read in this browser only and never uploaded. You can also drop .md files anywhere on this page.</p></section>
+<p class="local-note">Your own texts, in the <a href="https://github.com/gmleuning/neoperseus/blob/main/corpus/catalog/library_format.md">library format</a>, read in this browser only and never uploaded. You can also drop .md files anywhere on this page.</p></section>
 <div class="filters"><input id="q" type="search" placeholder="Search author or title (accents optional)" autofocus>
 <label>Repository <select id="src"><option value="">All</option>{"".join(f'<option value="{k}">{html.escape(v)}</option>' for k, v in SOURCES)}</select></label>
 <label><input type="checkbox" id="eng"> with English</label>
-<label><input type="checkbox" id="shelf"> hide works on my shelf</label></div>
+<label><input type="checkbox" id="in-library"> hide works already in the library</label></div>
 <p class="count" id="n"></p>
 <table class="cat"><thead><tr><th>Author</th><th>Title</th><th>Languages</th><th>Repository</th><th></th></tr></thead>
 <tbody id="rows"></tbody></table>

@@ -1,4 +1,4 @@
-// Text search across the shelf. Each work's text sits in search/<work>.js and is loaded only
+// Text search across the library. Each work's text sits in search/<work>.js and is loaded only
 // when a search needs it. Accents, breathings, case, final sigma, u/v and i/j are ignored.
 (function () {
   var WORKS = window.WORKS || [];
@@ -60,7 +60,7 @@
   var scope = $("scope");
   var params = new URLSearchParams(location.search);
   (function () {
-    var opts = ['<option value="*">Everything on the shelf</option>'];
+    var opts = ['<option value="*">Everything in the library</option>'];
     var byAuthor = {}, authors = [];
     WORKS.forEach(function (w) {
       if (!byAuthor[w.author_id]) { byAuthor[w.author_id] = []; authors.push(w.author_id); }

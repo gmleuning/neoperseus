@@ -50,10 +50,10 @@
     });
   }
   var ready = null;
-  function dictReady() {        // the work-title table, and the map of works on the shelf
+  function dictReady() {        // the work-title table, and the map from works to their pages
     if (!ready) {
       ready = Promise.all([window.DICT_WORKS ? true : loadScript(ROOT + "dict/meta.js"),
-                           window.SHELF ? true : loadScript(ROOT + "shelf.js")])
+                           window.WORK_PAGES ? true : loadScript(ROOT + "work_pages.js")])
         .then(function () { return !!window.DICT_WORKS; });
     }
     return ready;
@@ -233,7 +233,7 @@
         a.title = meta[0] + ", " + meta[1] + " " + r;
         if (expand) a.textContent = meta[0] + ", " + meta[1] + " " + r;
       }
-      var page = window.SHELF && window.SHELF[w];
+      var page = window.WORK_PAGES && window.WORK_PAGES[w];
       if (page) { a.href = ROOT + page + "#L" + r; }
       else { a.removeAttribute("href"); a.classList.remove("cit"); a.classList.add("cit", "off"); }
     }

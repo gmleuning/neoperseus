@@ -1,6 +1,6 @@
 """Build the dictionaries the reader's side panel uses (run: python perseus.py dictionaries).
 
-Sources, downloaded once into corpus/catalog/sources/dict/:
+Sources, downloaded once into corpus/dictionary/dict/:
 - LSJ, A Greek-English Lexicon: PerseusDL/lexica (27 files, about 270 MB), CC BY-SA.
 - Lewis & Short, A Latin Dictionary: PerseusDL/lexica (2 files, about 155 MB), CC BY-SA.
 - Greek Morpheus forms (inflected form -> headword and parse): gcelano/LemmatizedAncientGreekXML,
@@ -24,7 +24,7 @@ from .perseus import download
 from . import paths
 
 ROOT = paths.ROOT
-SRC = paths.SOURCES / "dict"
+SRC = paths.DICTIONARY_SOURCES
 LEXICA = "https://raw.githubusercontent.com/PerseusDL/lexica/master/CTS_XML_TEI/perseus/pdllex"
 MORPHEUS = "https://raw.githubusercontent.com/gcelano/LemmatizedAncientGreekXML/master/Morpheus/MorpheusUnicode.xml.zip"
 

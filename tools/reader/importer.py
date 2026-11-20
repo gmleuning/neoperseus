@@ -1,4 +1,4 @@
-"""Import a play converted from an EPUB (pandoc Markdown) into the library format (SPEC.md).
+"""Import a play converted from an EPUB (pandoc Markdown) into the library format (corpus/catalog/library_format.md).
 
 Handles the layout of the Chicago "Complete Greek Tragedies" conversions and similar books:
 a title block and an introduction, a cast list, speakers in capitals, stage directions in
@@ -46,13 +46,13 @@ def unescape(s):
     return re.sub(r"\\([\[\]()'\"!.#-])", r"\1", s)
 
 
-def guess(path, catalog=None, shelf=()):
+def guess(path, catalog=None, in_library=()):
     """Front matter guessed from a file name like 'Aeschylus. Agamemnon (Tr. Richmond Lattimore).md'."""
     stem = Path(path).stem
     m = FILENAME.match(stem)
     author, title, tr = (m.group("author").strip(), m.group("title").strip(), (m.group("tr") or "").strip()) \
         if m else ("", stem, "")
-    cands = candidates(author, catalog, shelf)
+    cands = candidates(author, catalog, in_library)
     want = TITLE_ALIASES.get(fold(title), fold(title))
     work = next((c["id"] for c in cands if fold(c["title"]) == want), "")
     if not work:
@@ -62,16 +62,16 @@ def guess(path, catalog=None, shelf=()):
             "language": "eng", "candidates": cands}
 
 
-def candidates(author, catalog, shelf=()):
-    """Works by this author in the catalog, those on the shelf first."""
+def candidates(author, catalog, in_library=()):
+    """Works by this author in the catalog, those already in the library first."""
     if not catalog or not author:
         return []
     names = catalog.get("authors", {})
     out = []
     for w in catalog.get("works", []):
         if fold(author) and fold(author) in fold(names.get(w["author"], w["author"])):
-            out.append({"id": w["id"], "title": w["title"], "shelf": w["id"] in shelf})
-    out.sort(key=lambda c: (not c["shelf"], c["title"]))
+            out.append({"id": w["id"], "title": w["title"], "in_library": w["id"] in in_library})
+    out.sort(key=lambda c: (not c["in_library"], c["title"]))
     return out
 
 

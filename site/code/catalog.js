@@ -5,7 +5,7 @@
 (function () {
   var rows = window.CATALOG || [];
   var q = document.getElementById("q"), eng = document.getElementById("eng"), src = document.getElementById("src"),
-      shelf = document.getElementById("shelf"), tbody = document.getElementById("rows"),
+      inLibrary = document.getElementById("in-library"), tbody = document.getElementById("rows"),
       count = document.getElementById("n");
   var canAdd = false, busy = false;
   var REPO = { perseus: "Perseus", wikisource: "Wikisource" };
@@ -23,7 +23,7 @@
   function langs(r) { return r[4].split("+").map(function (l) { return NAMES[l] || l; }).join(" + "); }
 
   function action(r, i) {
-    if (r[6]) return '<span class="on">on your shelf</span>' + (canAdd && r[7] === "wikisource"
+    if (r[6]) return '<span class="on">in your library</span>' + (canAdd && r[7] === "wikisource"
       ? ' <button type="button" class="linkish" data-tr="' + i + '" title="Paste the address of an English Wikisource translation">+ translation</button>' : "");
     if (canAdd) return '<button type="button" class="icon-btn" data-add="' + i + '">Add</button>' + (r[7] === "wikisource"
       ? ' <a class="linkish" target="_blank" rel="noopener" href="https://en.wikisource.org/wiki/' + encodeURIComponent(r[2].replace(/ /g, "_")) + '">translations ↗</a>' : "");
@@ -38,7 +38,7 @@
       var r = rows[i];
       if (src.value && r[7] !== src.value) continue;
       if (eng.checked && !r[5]) continue;
-      if (shelf.checked && r[6]) continue;
+      if (inLibrary.checked && r[6]) continue;
       var ok = true;
       for (var w = 0; w < words.length; w++) if (hay[i].indexOf(words[w]) < 0) { ok = false; break; }
       if (!ok) continue;
@@ -53,7 +53,7 @@
     tbody.innerHTML = out.join("");
     count.textContent = n + " works" + (n > 300 ? " (showing the first 300; narrow the search)" : "");
   }
-  [q, eng, src, shelf].forEach(function (el) { el.addEventListener("input", render); });
+  [q, eng, src, inLibrary].forEach(function (el) { el.addEventListener("input", render); });
 
   // ---- adding (only when served by `python perseus.py edit`) ----------------------------
   var bar = document.createElement("div");           // visible wherever the page is scrolled to

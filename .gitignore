@@ -1,25 +1,25 @@
-# generated: rebuild with python perseus.py update
+# ---- built and generated: recreated by the build
 site/public/
 site/local/
 site/cache/
 site/.wrangler/
 corpus/library/perseus/
-corpus/catalog/sources/
 __pycache__/
 *.pyc
-# texts that may not be published (read only into site/local/ by python perseus.py build)
+
+# ---- never committed: texts that may not be published
 corpus/library/private/
-# raw files and working copies (in copyright or not yet sorted): never commit
-corpus/catalog/inbox/
-corpus/catalog/unsorted/
-# source scans of the Turner painting (218 MB); the site uses beacon.jpg and beacon-tall.jpg
+# raw files waiting to be imported and drafts being checked (include copyrighted translations)
+corpus/catalog/0_inbox/
+corpus/catalog/1_checkstage/
+
+# ---- downloaded material: the Perseus XML and the dictionary sources (re-downloadable, over 700 MB)
+corpus/dictionary/
+
+# ---- large originals and licensed files
 assets/images/JMW Turner*
 assets/images/Turner Beacon Light.png
-# commercial font (Pangram Pangram), not redistributable in a public repo
 assets/fonts/PPEditorialNew-*
-# local tool settings
+
+# ---- local tool settings
 .claude/
-# old folders from before the reorganization, until they are deleted
-/library/
-/.wrangler/
-/.buildcache/

@@ -1,4 +1,4 @@
-"""Fetch Perseus texts listed on the shelf and convert them to library Markdown."""
+"""Fetch the Perseus texts listed in corpus/continue_reading.txt and convert them to library Markdown."""
 import json
 import re
 import sys
@@ -10,9 +10,9 @@ from . import paths, tei
 
 ROOT = paths.ROOT
 CATALOG = paths.CATALOG_JSON
-CORPUS = paths.SOURCES              # downloaded Perseus XML
+CORPUS = paths.PERSEUS_XML           # downloaded Perseus XML
 LIBRARY = paths.LIBRARY_PERSEUS
-SHELF = paths.SHELF
+CONTINUE_READING = paths.CONTINUE_READING
 LANGS = {"grc", "lat", "eng"}
 
 
@@ -20,21 +20,21 @@ def load_catalog():
     return json.loads(CATALOG.read_text(encoding="utf-8"))
 
 
-def read_shelf():
+def read_continue_reading():
     """Entries are work ids (tlg0006.tlg012) or author ids (tlg0059 = everything by Plato).
     Anything after # is a comment."""
-    if not SHELF.exists():
+    if not CONTINUE_READING.exists():
         return []
     out = []
-    for line in SHELF.read_text(encoding="utf-8").splitlines():
+    for line in CONTINUE_READING.read_text(encoding="utf-8").splitlines():
         line = line.split("#", 1)[0].strip()
         if line:
             out.append(line.split()[0])
     return out
 
 
-def shelf_works(catalog, entries=None):
-    entries = read_shelf() if entries is None else entries
+def continue_reading_works(catalog, entries=None):
+    entries = read_continue_reading() if entries is None else entries
     works, missing = [], []
     for e in entries:
         hits = [w for w in catalog["works"] if w["id"] == e or w["author"] == e]

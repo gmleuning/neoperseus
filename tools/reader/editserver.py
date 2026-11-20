@@ -1,7 +1,8 @@
 """Local edit mode: `python perseus.py edit` serves site/public/ on this computer only and adds the
 editing tools (site/code/edit.js) to each page as it is served. The built pages, and so the public
-site, never contain them. Edits are rules in corpus/library/edits.tsv (see reader/edits.py); Publish
-rebuilds, commits that file, pushes to GitHub and deploys to Cloudflare Pages."""
+site, never contain them. It offers import (from the inbox into the library), rebuild and publish; texts
+are edited as files. Publish rebuilds, commits the texts in corpus/library, pushes to GitHub and deploys
+to Cloudflare Pages."""
 import json
 import os
 import subprocess
@@ -11,7 +12,6 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import edits as text_edits
 from . import importer
 from . import paths
 from . import sources
@@ -19,9 +19,8 @@ from . import sources
 ROOT = paths.ROOT
 SITE = paths.SITE_PUBLIC
 SITE_LOCAL = paths.SITE_LOCAL
-RULES = paths.EDITS_TSV
 INBOX = paths.INBOX                              # raw files waiting to be imported
-DEST = {"private": paths.LIBRARY_PRIVATE, "own": paths.LIBRARY_OWN}
+DEST = {"private": paths.LIBRARY_PRIVATE, "library": paths.LIBRARY}
 _catalog = None
 
 
@@ -33,7 +32,7 @@ def catalog():
     return _catalog
 
 
-def shelf():
+def in_library():
     d = paths.LIBRARY_PERSEUS
     return {p.name for p in d.iterdir()} if d.is_dir() else set()
 
@@ -62,7 +61,7 @@ def inbox():
             head = p.read_text(encoding="utf-8", errors="replace")[:600]
             if head.startswith("---") and "\nwork:" in head:
                 continue                       # already in the library format
-        g = importer.guess(p, catalog(), shelf())
+        g = importer.guess(p, catalog(), in_library())
         done = [k for k, d in DEST.items() if (d / f"{g['id']}.md").exists()]
         out.append({"file": p.name, **g, "imported": done,
                     "kind": "book" if p.suffix.lower() in BOOKS else "md"})
@@ -87,7 +86,7 @@ def do_import(b, preview=False):
         raise ValueError("file not found in corpus/catalog/inbox")
     dest = DEST.get(b.get("dest"))
     if dest is None and not preview:
-        raise ValueError("destination must be private or own")
+        raise ValueError("destination must be private or library")
     meta = {k: (b.get(k) or "").strip() for k in ("id", "work", "author", "title", "edition", "language")}
     meta["language"] = meta["language"] or "eng"
     meta["source"] = src.name
@@ -181,19 +180,19 @@ def build_steps():
 
 
 def add_steps(source, wid, translation=""):
-    """The catalog's Add button: put the work on the shelf (Perseus) or download the Wikisource page(s),
+    """The catalog's Add button: put the work in continue_reading.txt (Perseus) or download the Wikisource page(s),
     then rebuild this computer's site."""
     from . import perseus as perseus_mod
 
     def add_perseus():
-        works, missing = perseus_mod.shelf_works(catalog(), [wid])
+        works, missing = perseus_mod.continue_reading_works(catalog(), [wid])
         if missing:
             raise ValueError(f"not in the catalog: {wid}")
-        lines = perseus_mod.SHELF.read_text(encoding="utf-8").splitlines() if perseus_mod.SHELF.exists() else []
+        lines = perseus_mod.CONTINUE_READING.read_text(encoding="utf-8").splitlines() if perseus_mod.CONTINUE_READING.exists() else []
         if wid not in {l.split("#", 1)[0].strip() for l in lines}:
             lines.append(wid)
-            perseus_mod.SHELF.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return f"{wid} added to shelf.txt"
+            perseus_mod.CONTINUE_READING.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return f"{wid} added to continue_reading.txt"
 
     def add_wikisource():
         from . import wikisource_fetch
@@ -205,10 +204,10 @@ def add_steps(source, wid, translation=""):
         return "wrote " + ", ".join(str(p.relative_to(ROOT)).replace("\\", "/") for p in paths)
 
     if source == "perseus":
-        works, missing = perseus_mod.shelf_works(catalog(), [wid])
+        works, missing = perseus_mod.continue_reading_works(catalog(), [wid])
         if missing:
             raise ValueError(f"not in the catalog: {wid}")
-        return [("add to shelf", add_perseus, False), ("fetch and convert", [PY, "perseus.py", "update"], False)]
+        return [("add to continue_reading.txt", add_perseus, False), ("fetch and convert", [PY, "perseus.py", "update"], False)]
     if source == "wikisource":
         return [("download from Wikisource", add_wikisource, False)] + build_steps()
     raise ValueError("unknown source")
@@ -216,17 +215,14 @@ def add_steps(source, wid, translation=""):
 
 def publish_steps():
     def commit():
-        subprocess.run(["git", "add", str(RULES.relative_to(ROOT))], cwd=ROOT, check=True)
-        if DEST["own"].is_dir():           # texts imported into the public library
-            subprocess.run(["git", "add", str(paths.LIBRARY_OWN.relative_to(ROOT))], cwd=ROOT, check=True)
+        # .gitignore keeps corpus/library/perseus (generated) and corpus/library/private out
+        subprocess.run(["git", "add", str(paths.LIBRARY.relative_to(ROOT))], cwd=ROOT, check=True)
         if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT).returncode == 0:
-            return "no new edits to commit"
-        n = len(text_edits.Rules(RULES).rules)
-        subprocess.run(["git", "commit", "-m", f"Text edits ({n} rule{'s' if n != 1 else ''} in corpus/library/edits.tsv)"],
-                       cwd=ROOT, check=True, capture_output=True)
-        return "committed corpus/library/edits.tsv"
-    shell = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "deploy.ps1"] \
-        if os.name == "nt" else ["pwsh", "-File", "deploy.ps1"]
+            return "no new texts to commit"
+        subprocess.run(["git", "commit", "-m", "Texts in corpus/library"], cwd=ROOT, check=True, capture_output=True)
+        return "committed the texts in corpus/library"
+    shell = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools/deploy.ps1"] \
+        if os.name == "nt" else ["pwsh", "-File", "tools/deploy.ps1"]
     # deploy.ps1 uploads site/, which the build above has just brought up to date (no private texts in it)
     return build_steps() + [("commit", commit, False),
                             ("git push", ["git", "push"], False),
@@ -284,13 +280,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if path == "/__edit/rules":
-            ids = [x for x in (self.path.split("ids=", 1)[1:] or [""])[0].split(",") if x]
-            from urllib.parse import unquote
-            ids = [unquote(x) for x in ids]
-            rules = text_edits.Rules(RULES)
-            self.send_json([{"id": t, "action": a, "anchor": x} for t, a, x in rules.rules if t in ids])
-            return
         if path == "/__edit/status":
             return self.send_json(JOB.status())
         if path == "/__edit/inbox":
@@ -333,15 +322,6 @@ class Handler(SimpleHTTPRequestHandler):
             b = self.body()
         except ValueError:
             return self.send_json({"error": "bad request"}, 400)
-        rules = text_edits.Rules(RULES)
-        if path == "/__edit/delete":
-            if not b.get("id") or not b.get("text"):
-                return self.send_json({"error": "missing id or text"}, 400)
-            r = rules.add(b["id"], "delete", b["text"])
-            return self.send_json({"ok": True, "anchor": r[2]})
-        if path == "/__edit/undo":
-            rules.remove(b.get("id", ""), b.get("action", "delete"), b.get("anchor", ""))
-            return self.send_json({"ok": True})
         if path in ("/__edit/import", "/__edit/preview"):
             try:
                 return self.send_json(do_import(b, preview=path.endswith("preview")))

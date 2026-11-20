@@ -1,4 +1,4 @@
-// Texts on this device: Markdown files (SPEC.md format) kept in this browser only. Two sources:
+// Texts on this device: Markdown files (library format) kept in this browser only. Two sources:
 // a linked folder (Chrome and Edge: the browser remembers it and re-reads it on each visit) and
 // files added by hand or dropped on the library page (every browser). Nothing is uploaded.
 // On library.html this adds the "On this device" bar and lists the texts under their authors;
@@ -496,10 +496,10 @@
   function href(work, o, t) {
     return "local.html?w=" + encodeURIComponent(work) + (o || t ? "&o=" + (o || 0) + "&t=" + (t || 0) : "");
   }
-  // entries in the shape library.js uses for the shelf
-  function entries(files, shelf) {
+  // entries in the shape library.js uses for the library list
+  function entries(files, library) {
     var ids = {};
-    (shelf || []).forEach(function (e) { if (!e.local) ids[e.author] = e.author_id; });
+    (library || []).forEach(function (e) { if (!e.local) ids[e.author] = e.author_id; });
     return byWork(files).map(function (w) {
       var m = w.originals[0].meta;
       return {
@@ -709,7 +709,7 @@
       var target = document.getElementById(location.hash.slice(1));
       if (target) target.scrollIntoView();
     }
-    loadScripts(["reader.js", "shelf.js", "dict.js"]);
+    loadScripts(["reader.js", "work_pages.js", "dict.js"]);
   }
 
   if (document.body.classList.contains("local-page")) localPage();

@@ -1,4 +1,4 @@
-"""Convert one Perseus canonical TEI (EpiDoc) file to the library Markdown format (SPEC.md).
+"""Convert one Perseus canonical TEI (EpiDoc) file to the library Markdown format (corpus/catalog/library_format.md).
 
 Every citable number in the source becomes an explicit key, written in full
 (`{{1.150}}` for Iliad 1.150, `{{17a}}` for a Stephanus section, `{{1.5}}` for

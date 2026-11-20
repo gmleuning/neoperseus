@@ -296,7 +296,7 @@ def finish(lines, layout):
 
 def import_epub(path, work, lang="eng", author="", title="", dest=None):
     from . import paths
-    dest = dest or paths.LIBRARY_OWN
+    dest = dest or paths.LIBRARY
     meta, docs = read_epub(path)
     w = Writer()
     layout = to_markdown(docs, w)

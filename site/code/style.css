@@ -367,7 +367,7 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
   flex: 1 1 18rem; padding: .4rem .7rem; background: transparent;
   border: 1px solid var(--faint); border-radius: 6px;
 }
-.shelf { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.4rem; align-items: start; }
+.library-grid { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.4rem; align-items: start; }
 .authors { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; border-right: 1px solid var(--faint); padding-right: 1rem; }
 .authors button {
   display: flex; justify-content: space-between; gap: .5rem; width: 100%; text-align: left;
@@ -449,7 +449,7 @@ body.dropping { outline: 3px dashed var(--accent); outline-offset: -10px; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .toc { position: static; max-height: none; padding-top: 1rem; }
   html.drawer-open .layout { margin-right: auto; }
-  .shelf { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .library-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .authors { position: static; max-height: 14rem; border-right: 0; border-bottom: 1px solid var(--faint); padding: 0 0 .6rem; }
 }
 /* ---- compare: a translation either side of the original ---------------- */

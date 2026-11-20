@@ -1,16 +1,19 @@
-# Format and revision check (for an LLM)
+# Format and revision check
 
-Paste this whole file, then the text or text pair to check. It states the file format, the error
-categories to look for, and how to report fixes. It is written to be used as-is as instructions.
-
----
+Paste this whole file, then the text or text pair to check. It states the file format, the error categories to
+look for, and what to output: a short list of the problems and **a runnable revision script that applies the fixes**.
 
 ## Your task
 
-You are checking a text file (or an original and its translation) against the format below and against
-each other. Report real problems only, each with a minimal fix. Do not rewrite, modernize or improve the
-text. Never invent content: if something is missing from the source you were given, say so and stop.
-Keep every `{{key}}` exactly as it is unless the fix is about the key.
+You are checking a text file (or an original and its translation) against the format below and against each
+other. Find real problems only. Do not rewrite, modernize or improve the text. Never invent content: if something
+is missing from the source you were given, say so and leave it out of the script. Keep every `{{key}}` exactly as
+it is unless the fix is about the key.
+
+Your output has three parts, in this order:
+1. a **summary**: counts by category, and one line saying whether the text is ready or what to fix first;
+2. the **issues**, one short entry each (see "Issues");
+3. one **revision script** that applies every fix that can be made from the text alone (see "The revision script").
 
 ## The format
 
@@ -99,31 +102,57 @@ from the other file of the pair; `id` not unique; `label` not in the original la
 - **F6 register:** archaism, calque or padding that the original does not have ("hath", word-for-word
   rendering that reads as non-English). Report only if it hides the meaning or is inconsistent within the text.
 
-## How to report
+## Issues
 
-List issues, most serious first. For each:
+List them most serious first, one entry each, short:
 
 ```
-ID      S1, K3, F2 ...  (category code + number)
-Where   the key, or the first 8 words of the paragraph
-Quote   the exact text that is wrong (short)
-Problem one sentence
-Fix     the exact replacement text, or "delete the line", or "add before <where>: <text>"
-Sure    high | medium | low
+S1  Where: {{2}} / first 8 words   Quote: "…"   Problem: one sentence   Sure: high|medium|low
 ```
 
-Rules for reporting:
-- Quote exactly; give the fix as text I can paste, not a description.
-- If an original is given, every **F** item must quote both the original and the translation.
-- Do not flag stylistic preference. Do not report the same pattern more than three times: say "and N
-  similar" with the keys.
-- Do not "correct" a faithful but unusual translation of a difficult original. Mark it `low` and explain.
-- If a fix needs knowledge you do not have (an author, a missing passage), write `need: <what>` as the fix.
-- End with a count by category and one line: whether the pair is ready, or what to fix first.
+- Quote exactly. Every **F** item quotes both the original and the translation.
+- The fix is not written here: it goes into the script, under the same ID.
+- Do not flag stylistic preference. Do not list the same pattern more than three times: say "and N similar"
+  with the keys, and fix all of them in the script.
+- Do not "correct" a faithful but unusual translation of a difficult original. List it as `low` and do not
+  put it in the script.
+- If a fix needs knowledge you do not have (an author, a missing passage), list it as `need: <what>` and leave
+  it out of the script.
+
+## The revision script
+
+Write **one script** that, run on the file(s), produces the revised text. It must never touch the original.
+
+**Choose the method that fits the job:**
+- **Python 3 (standard library only)** is the default: it works on Windows, Mac and Linux, reads UTF-8 reliably and
+  handles any number of changes. Use it for most outputs, and always when keys change in both files of a pair, or
+  when paragraphs are merged, split or reordered.
+- **PowerShell** only if the user says they are on Windows and the fixes are plain find-and-replace or line
+  deletions.
+- Anything simpler (a single `sed` command, a unified diff for `patch`) only if it is clearly the easiest and
+  safest way to make one or two changes. Say which method you chose and why in one line.
+
+**The script must:**
+1. Take the input path(s) as arguments (a pair: the original's path, then the translation's).
+2. Read as UTF-8 without BOM, keep the file's existing line endings, and write the result next to the input as
+   `<name>.revised.md`. Never overwrite the input.
+3. Make each change by an **exact quote** of the text to find (never by line number), and check that the quote
+   occurs exactly once (or the stated number of times). If it does not, skip that change, print its ID as
+   `NOT APPLIED`, and carry on.
+4. Label every change with its issue ID in a comment, so the script reads as the issue list made executable.
+5. Leave all `{{keys}}`, headers and unrelated text untouched; change a key only for a K issue, and in both files
+   of a pair together.
+6. Print a summary (applied, not applied) and then a unified diff of what changed, so it can be reviewed
+   before the revised file replaces the original.
+7. Use no network and delete nothing but the text the fixes name.
+
+Put the script in one fenced code block, then give the exact command to run it, for example
+`python revise.py "ws.the-bet.ru.md" "ws.the-bet.eng.md"`.
 
 ## What to send
 
-- **Format check (one file):** the whole file if short; otherwise one `##` section at a time, with the header.
-- **Fidelity check (a pair):** the header of both files, then one section of each, in the same order, with
-  the keys intact. Keep each section to what fits comfortably; repeat for the next section.
-- Say the language of each text and, if known, the edition.
+- **One file:** the whole file if short; otherwise one `##` section at a time, with the header.
+- **A pair:** the header of both files, then one section of each in the same order, with the keys intact. Keep each
+  section to what fits comfortably, and repeat for the next section. Ask for one script per section, or for one
+  script that you extend.
+- Say the language of each text and, if known, the edition. Say whether the user is on Windows.

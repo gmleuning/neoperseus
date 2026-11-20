@@ -6,44 +6,42 @@ texts you add yourself. The result is plain HTML: no server, works offline, host
 
 **Read it online: https://neoperseus.pages.dev**
 
-This repository holds the code, the site's source, the catalogs, the format spec, the edit rules and the
-texts you add yourself. It does not hold the Perseus texts, the dictionaries or the built site: those come to
-over 1.5 GB and are downloaded or generated when you build.
+This repository holds the code, the site's source, the catalogs, the format notes, and the texts you add
+yourself. It does not hold the Perseus texts, the dictionaries or the built site: those come to over 1.5 GB
+and are downloaded or generated when you build.
 
 ## Where things are
 
-Four top-level folders, one idea each. Every path in the code is defined once, in
-[tools/reader/paths.py](tools/reader/paths.py).
+Every path in the code is defined once, in [tools/reader/paths.py](tools/reader/paths.py).
 
 ```
 neoperseus/
   perseus.py             a three-line launcher: python perseus.py edit, build, add ...
   assets/                what the site shows, not code
     fonts/               Gentium, Spectral, Hershey ... (and their licences)
-    images/              the landing painting and its crops, design sources
+    images/              the landing painting and its crops
   site/                  the website
-    code/                its CSS and JavaScript (the source)
-    public/              the built site: what is deployed            (generated)
-    local/               the overlay for this computer: catalog, private texts   (generated)
+    code/                its CSS and JavaScript
+    public/              the built site, what is deployed             (generated)
+    local/               the built overlay for this computer          (generated)
     cache/               what each built site was made from           (generated)
-  corpus/                the texts, and everything needed to get more
-    library/             finished texts
-      perseus/           converted from Perseus                       (generated)
-      own/               yours, published
-      private/           yours, never published (not committed)
-      edits.tsv          edit rules for the Perseus texts
-    catalog/             finding and importing
+  corpus/
+    library/             every text that is built
+      (texts)            texts that did not come from Perseus sit directly here; committed
+      perseus/           the preliminary corpus, converted from Perseus      (generated)
+      private/           never published, never committed
+      groups.tsv         how authors with many works are grouped on the library page
+    dictionary/          LSJ, Lewis & Short and Greek forms (dict/), and the downloaded Perseus
+                         XML (greekLit/, latinLit/)                        (downloaded)
+    catalog/             finding and importing texts
       catalog.json       every Perseus work
-      wikisource.json    Wikisource pairs
-      groups.tsv         how authors with many works are grouped
-      shelf.txt          your Perseus reading list
-      SPEC.md            the file format
-      TEXTS.md           formatting, pairing and finishing texts by hand
-      format_and_revis.md  the format and error categories as an LLM prompt, to check and fix texts
-      inbox/             raw files waiting to be imported (not committed)
-      unsorted/          files not yet sorted (not committed)
-      sources/           downloaded Perseus XML, dictionary sources     (generated)
+      sources/           wikisource.json, the Wikisource list
+      0_inbox/           raw files waiting to be imported            (not committed)
+      1_checkstage/      drafts being checked                        (not committed)
+      library_format.md  how texts are formatted, paired and finished by hand
+      0_revision_check.md  a prompt for an LLM: checks a text and writes a script that fixes it
     reviews/             proofreading logs
+    continue_reading.txt the Perseus works to keep converted and up to date
   tools/                 all the Python and the scripts
     perseus.py           the command itself
     reader/              the package: build, import, edit server, paths
@@ -52,8 +50,9 @@ neoperseus/
     legacy/              the trial fetch scripts the importer grew from
 ```
 
-Generated folders are in `.gitignore` and safe to delete: the next build or `update` recreates them.
-(`.claude/` is the Claude desktop app's own settings for this project. Nothing in it is needed to build.)
+Generated and downloaded folders are in `.gitignore` and safe to delete: the next build, `update` or
+`dictionaries` recreates them. (`.claude/` is the Claude desktop app's own settings for this project; nothing
+in it is needed to build.)
 
 ## What it does
 
@@ -68,8 +67,8 @@ Generated folders are in `.gitignore` and safe to delete: the next build or `upd
   columns, line numbers, notes. Settings stay in the browser.
 - **Works on a phone.** The reader's title opens a contents dropdown (with Go to); Blocks/Lines lives in Settings.
 - **Your own texts**, from a file you wrote to a PDF you imported; or opened in the browser only, never uploaded.
-- **A local catalog of public-domain works** (Perseus and Wikisource) with an Add button, and an edit mode
-  for deleting and importing. These exist only on your own computer, not on the public site.
+- **A local catalog of public-domain works** (Perseus and Wikisource) with an Add button, and an Import panel.
+  These exist only on your own computer, not on the public site.
 
 ## Setup
 
@@ -89,10 +88,10 @@ python perseus.py find euripides electra       # look up a Perseus work's id
 python perseus.py add tlg0006.tlg012           # add it: downloads, converts, builds
 python perseus.py add tlg0059                  # an author id adds every work by that author
 python perseus.py dictionaries                 # once: LSJ, Lewis & Short, Greek forms (about 440 MB)
-python perseus.py edit                         # open the reader with the catalog and editing on
+python perseus.py edit                         # open the reader with the catalog and Import
 ```
 
-`corpus/catalog/shelf.txt` is the Perseus reading list (one work or author id per line);
+`corpus/continue_reading.txt` lists the Perseus works to keep converted (one work or author id per line);
 `python perseus.py update` makes the library match it. `python perseus.py remove ID` takes a work off.
 
 ## Two sites, one build
@@ -107,43 +106,42 @@ python perseus.py edit                         # open the reader with the catalo
 `python perseus.py edit` serves `site/local/` first and `site/public/` for everything else, so text pages are
 never copied or built twice. `python perseus.py build --public` makes only `site/public/`.
 
-Builds are **incremental**: a work's pages are made again only when its Markdown, its edit rules or the page
-code changed (the record is in `site/cache/`). Nothing changed: about 2 seconds. One text changed: about 1.
-A first build, or one after editing `tools/reader/build.py`, `library.py` or `edits.py`: a few minutes.
+Builds are **incremental**: a work's pages are made again only when its Markdown or the page code changed (the
+record is in `site/cache/`). Nothing changed: about 2 seconds. One text changed: about 1. A first build, or one
+after editing `tools/reader/build.py` or `library.py`: a few minutes.
 
-## The catalog and edit mode
+## The catalog and Import
 
 `python perseus.py edit` opens http://127.0.0.1:8790 with these extras (added by the local server, not in any
 built page):
 
 - **Catalog**: *Works in public domain repositories*. Perseus and Wikisource so far, with a repository
-  filter, "with English", and "hide works on my shelf". **Add** puts a Perseus work on the shelf, or downloads
-  a Wikisource work in both languages. A status bar shows progress.
-  `python tools/wikisource_catalog.py` refreshes the Wikisource list.
-- **Import…**: raw Markdown, or a PDF or EPUB book, from `corpus/catalog/inbox/`. For a book the panel lists
+  filter, "with English", and "hide works already in the library". **Add** puts a Perseus work in
+  `continue_reading.txt`, or downloads a Wikisource work in both languages straight into `corpus/library/`.
+  A status bar shows progress. `python tools/wikisource_catalog.py` refreshes the Wikisource list.
+- **Import…**: raw Markdown, or a PDF or EPUB book, from `corpus/catalog/0_inbox/`. For a book the panel lists
   the verse parts, with pages and line numbers; choose one, preview, then import to **Private**
-  (`corpus/library/private/`, this computer only) or **Library** (`corpus/library/own/`, published).
-- **Alt-click a paragraph** to delete it. For Perseus texts this is a rule in `corpus/library/edits.tsv`
-  (they are regenerated); for your own texts you can simply edit the file.
-- **Rebuild** and **Publish** (build, commit the edit rules and `corpus/library/own/`, push, deploy `site/public/`).
+  (`corpus/library/private/`, this computer only) or **Library** (`corpus/library/`, published).
+- **Rebuild** and **Publish** (build, commit the texts in `corpus/library/`, push, deploy `site/public/`).
 
-Every import or download is a draft that needs a short revision by hand. **How texts are formatted, how two
-texts are paired, and the routine for finishing each one is in [TEXTS.md](corpus/catalog/TEXTS.md).** The markup
-itself is in [SPEC.md](corpus/catalog/SPEC.md).
+Texts are not edited in the reader. Every import or download is a draft: fix the file itself, or give the
+text to an LLM with [0_revision_check.md](corpus/catalog/0_revision_check.md), which lists the problems and writes a
+script that makes the fixes. How texts are formatted, how two texts are paired, and the routine for finishing
+each one is in [library_format.md](corpus/catalog/library_format.md).
 
 ## Your own texts
 
-A Markdown file in `corpus/library/own/` that follows [SPEC.md](corpus/catalog/SPEC.md) is part of the library,
-listed under its author beside the Perseus texts. To pair a translation with an original, give both the same
-`work:` and the same citation keys; a translation of a Perseus work takes that work's id (`phi1276.phi001` for
-Juvenal's Satires) and pairs with the Perseus original automatically. Wikisource EPUBs can also be converted with
+A Markdown file directly in `corpus/library/` is part of the library, listed under its author beside the Perseus
+texts. To pair a translation with an original, give both the same `work:` and the same citation keys; a
+translation of a Perseus work takes that work's id (`phi1276.phi001` for Juvenal's Satires) and pairs with the
+Perseus original automatically. Wikisource EPUBs can also be converted with
 
 ```powershell
 python perseus.py import-wikisource Dyskolos.epub --work menander.dyskolos --lang grc --author Menander --title Dyskolos
 ```
 
-Folders carry meaning: `own/` is published, `private/` never is, `perseus/` is generated, `inbox/` is for raw
-files. Only `corpus/library/` is built. See TEXTS.md, section 3.
+Only `corpus/library/` is built: `0_inbox/` and `1_checkstage/` never are. Move a checked draft into
+`corpus/library/` to publish it, or into `corpus/library/private/` to read it here only.
 
 ## Publishing (Cloudflare Pages)
 
@@ -154,13 +152,13 @@ file). First time only: `npx wrangler login`. Then:
 ```powershell
 .\tools\deploy.ps1            # upload site/public/ as it is
 .\tools\deploy.ps1 -Build     # build the public site first, then upload
-.\tools\deploy.ps1 -Update    # re-run everything for the shelf, then build and upload
+.\tools\deploy.ps1 -Update    # re-run everything for continue_reading.txt, then build and upload
 .\tools\deploy.ps1 -Check     # check site/public/ against Cloudflare's limits, upload nothing
 ```
 
 Only changed files are uploaded after the first deploy. The script refuses a site that carries local markers
 (`_local`, `_private`) or has no fonts. The Greek word-form data is **CC BY-NC**, so the published site must
-stay non-commercial: no ads, no charging. Keep copyrighted texts out of `corpus/library/own/`; use `private/`.
+stay non-commercial: no ads, no charging. Keep copyrighted texts out of `corpus/library/`; use `private/`.
 
 ## Sources and licences
 
@@ -181,7 +179,7 @@ stay non-commercial: no ads, no charging. Keep copyrighted texts out of `corpus/
 
 ## Status
 
-Done: catalog, shelf, download; Perseus converter; side-by-side pages with sync report; Compare;
+Done: catalog, continue_reading, download; Perseus converter; side-by-side pages with sync report; Compare;
 Wikisource import (EPUB and API) and the Add button; book import (PDF, EPUB); library, search, settings;
 dictionaries and Wiktionary; incremental builds and the public/local split; phone layout; one folder
 structure with every path in one file.

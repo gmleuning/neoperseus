@@ -1,13 +1,13 @@
 """Library reader: one command for everything.
 
-    python perseus.py add tlg0006.tlg012      add a work (or an author id: tlg0059 = all of Plato) to the shelf, then update
-    python perseus.py remove tlg0006.tlg012   take it off the shelf (its downloaded and converted files are deleted)
+    python perseus.py add tlg0006.tlg012      add a work (or an author id: tlg0059 = all of Plato) to corpus/continue_reading.txt, then update
+    python perseus.py remove tlg0006.tlg012   take it off continue_reading.txt (its downloaded and converted files are deleted)
     python perseus.py update                  fetch anything missing, convert, and rebuild the site
     python perseus.py build                   rebuild the site only (after editing your own texts)
     python perseus.py build --public          ... only site/public/, the public version that is deployed
                                               (a plain build also makes site/local/: catalog, private texts)
-    python perseus.py edit                    edit texts in the browser (this computer only), then Publish
-    python perseus.py publish                 rebuild, commit corpus/library/edits.tsv, push, deploy
+    python perseus.py edit                    the local reader with the catalog and Import (this computer only), then Publish
+    python perseus.py publish                 rebuild, commit the texts in corpus/library, push, deploy
     python perseus.py find euripides          search the catalog from the command line
     python perseus.py dictionaries            download and build LSJ and Lewis & Short (once; about 440 MB)
     python perseus.py import-wikisource FILE.epub --work ID [--lang grc] [--author A] [--title T]
@@ -30,7 +30,7 @@ LIBRARY = paths.LIBRARY
 
 def cmd_update(args, force=False):
     catalog = perseus.load_catalog()
-    works, missing = perseus.shelf_works(catalog)
+    works, missing = perseus.continue_reading_works(catalog)
     for m in missing:
         print(f"  not in the catalog: {m}")
     n = perseus.fetch(catalog, works)
@@ -51,8 +51,6 @@ def cmd_build(args, catalog=None):
     print(f"built {len(entries)} work(s) into {SITE}" + ("" if public else f" and {SITE_LOCAL}") +
           f": {stats.get('made', 0)} made, {stats.get('cached', 0)} unchanged" +
           (f", {stats['removed']} removed" if stats.get("removed") else ""))
-    for tid, action, anchor in (builder.EDITS.unmatched() if builder.EDITS else []):
-        print(f"  edit not applied (text changed?): {tid} {action} \"{anchor[:50]}…\"")
     if approx:
         print(f"  {len(approx)} verse translation(s) have their own line numbers and are placed approximately"
               " (see site/local/_sync.md)")
@@ -62,31 +60,31 @@ def cmd_build(args, catalog=None):
     print("to edit or import texts: python perseus.py edit  (then http://127.0.0.1:8790/)")
 
 
-def edit_shelf(add=(), remove=()):
-    lines = perseus.SHELF.read_text(encoding="utf-8").splitlines() if perseus.SHELF.exists() else []
+def edit_continue_reading(add=(), remove=()):
+    lines = perseus.CONTINUE_READING.read_text(encoding="utf-8").splitlines() if perseus.CONTINUE_READING.exists() else []
     present = {l.split("#", 1)[0].strip() for l in lines}
     for a in add:
         if a not in present:
             lines.append(a)
     lines = [l for l in lines if l.split("#", 1)[0].strip() not in set(remove)]
-    perseus.SHELF.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    perseus.CONTINUE_READING.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def cmd_add(args):
     catalog = perseus.load_catalog()
-    works, missing = perseus.shelf_works(catalog, args.ids)
+    works, missing = perseus.continue_reading_works(catalog, args.ids)
     if missing:
         sys.exit("not in the catalog: " + ", ".join(missing) + "  (try: python perseus.py find NAME)")
-    edit_shelf(add=args.ids)
+    edit_continue_reading(add=args.ids)
     for w in works:
         print(f"  + {w['id']}  {catalog['authors'].get(w['author'], '')}, {w['title']}")
     cmd_update(args)
 
 
 def cmd_remove(args):
-    edit_shelf(remove=args.ids)
+    edit_continue_reading(remove=args.ids)
     catalog = perseus.load_catalog()
-    works, _ = perseus.shelf_works(catalog, args.ids)
+    works, _ = perseus.continue_reading_works(catalog, args.ids)
     for w in works:
         shutil.rmtree(perseus.LIBRARY / w["id"], ignore_errors=True)
         for ed in w["editions"]:
@@ -124,7 +122,7 @@ def cmd_dictionaries(args):
 def cmd_import_wikisource(args):
     from reader import wikisource
     out = wikisource.import_epub(Path(args.file), work=args.work, lang=args.lang,
-                                 author=args.author, title=args.title, dest=LIBRARY / "own")
+                                 author=args.author, title=args.title, dest=LIBRARY)
     print(f"wrote {out}")
     print("edit it if needed, then run: python perseus.py build")
 

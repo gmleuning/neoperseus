@@ -1,4 +1,4 @@
-"""Add a Wikisource work from the catalog (corpus/catalog/wikisource.json) to corpus/library/own, both sides.
+"""Add a Wikisource work from the catalog (corpus/catalog/sources/wikisource.json) to corpus/library, both sides.
 
 It follows what worked in the trial scripts (tools/legacy/fetch_*.py), made generic:
 
@@ -351,7 +351,7 @@ def edition_of(title):
 def add(wid, dest=None, log=log_default, translation=""):
     """Original and English both. `translation` is an English Wikisource address to use instead of the hub's first."""
     w = find(wid)
-    dest = Path(dest or paths.LIBRARY_OWN)
+    dest = Path(dest or paths.LIBRARY)
     work = work_of(wid)
     olang, otitle = page_of(w["orig_url"])
     opages = fetch_work(olang, otitle, log)
@@ -390,5 +390,5 @@ def add_translation(wid, url, dest=None, log=log_default):
     epages = fetch_work("en", etitle, log)
     if not epages:
         raise RuntimeError(f"no text found on {url}")
-    return [write_side(dest or paths.LIBRARY_OWN, work_of(wid), w["en_title"], author_of(olang, otitle),
+    return [write_side(dest or paths.LIBRARY, work_of(wid), w["en_title"], author_of(olang, otitle),
                        "en", etitle, epages, edition_of(etitle), olang, log)]

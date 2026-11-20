@@ -1,4 +1,4 @@
-"""Build corpus/catalog/wikisource.json: Wikisource works that exist in English and in another language.
+"""Build corpus/catalog/sources/wikisource.json: Wikisource works that exist in English and in another language.
 
 It reads the translation hub pages on English Wikisource (Category:Translations_pages) and
 asks the MediaWiki API for their interwiki language links, so each row pairs an English page
