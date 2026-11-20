@@ -5,6 +5,7 @@ are edited as files. Publish rebuilds, commits the texts in corpus/library, push
 to Cloudflare Pages."""
 import json
 import os
+import socket
 import subprocess
 import threading
 import webbrowser
@@ -340,14 +341,29 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"error": "unknown"}, 404)
 
 
+def port_in_use(port):
+    """True if something already answers on this port. (On Windows a second server can bind a port that is
+    already taken and never receive a request, so binding alone cannot tell.)"""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.4):
+            return True
+    except OSError:
+        return False
+
+
 def serve(port=8790, open_browser=True):
     if not (SITE_LOCAL / "library.html").exists():
         print("building the local site (catalog and private texts)...")
         subprocess.run([PY, "perseus.py", "build"], cwd=ROOT, check=True)
+    wanted = port
+    while port_in_use(port) and port < wanted + 20:
+        port += 1
+    if port != wanted:
+        print(f"port {wanted} is already in use (an older edit server may still be running); using {port}.")
     handler = partial(Handler, directory=str(SITE))
     httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)      # this computer only
     url = f"http://127.0.0.1:{port}/library.html"
-    print(f"edit mode: {url}  (Alt-click a paragraph to delete it; Ctrl+C to stop)")
+    print(f"edit mode: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:
