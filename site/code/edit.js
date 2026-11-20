@@ -1,6 +1,6 @@
 // Local edit mode. Served only by `python perseus.py edit` (reader/editserver.py), which adds
 // this script to pages as it serves them; it is never copied into site/. Alt-click a paragraph
-// to delete it: the rule goes to library/edits.tsv and takes effect on Rebuild or Publish.
+// to delete it: the rule goes to corpus/library/edits.tsv and takes effect on Rebuild or Publish.
 (function () {
   "use strict";
   var body = document.body;
@@ -106,10 +106,10 @@
       }).join("") + "</ul>";
     }
     var waiting = inbox.filter(function (f) { return !f.imported.length; }).length;
-    h += '<div style="margin-top:.4rem">Inbox (library/additions): ' + inbox.length + " file" + (inbox.length === 1 ? "" : "s") +
+    h += '<div style="margin-top:.4rem">Inbox (corpus/catalog/inbox): ' + inbox.length + " file" + (inbox.length === 1 ? "" : "s") +
       (waiting ? ", " + waiting + " not imported" : "") + ' <button data-a="import">Import…</button></div>';
     h += '<div><button data-a="build"' + (running ? " disabled" : "") + ' title="Rebuild the site here to see the edits">Rebuild</button>' +
-      '<button class="go" data-a="publish"' + (running ? " disabled" : "") + ' title="Rebuild, commit library/edits.tsv, push to GitHub, deploy to Cloudflare">Publish</button></div>';
+      '<button class="go" data-a="publish"' + (running ? " disabled" : "") + ' title="Rebuild, commit corpus/library/edits.tsv, push to GitHub, deploy to Cloudflare">Publish</button></div>';
     if (job && job.state !== "idle") {
       h += '<div style="margin-top:.4rem">' + esc(job.name) + ": <b>" + esc(job.state) + "</b>" +
         (job.state === "done" && job.name === "Rebuild" ? ' <button data-a="reload">Reload page</button>' : "") + "</div>" +
@@ -140,7 +140,7 @@
       var r = rules[+b.getAttribute("data-i")];
       post("/__edit/undo", r).then(loadRules);
     } else if (a === "build" || a === "publish") {
-      if (a === "publish" && !confirm("Publish: rebuild the site, commit library/edits.tsv, push to GitHub and deploy to Cloudflare Pages?")) return;
+      if (a === "publish" && !confirm("Publish: rebuild the site, commit corpus/library/edits.tsv, push to GitHub and deploy to Cloudflare Pages?")) return;
       post("/__edit/" + a).then(function () { poll(); });
     } else if (a === "reload") location.reload();
     else if (a === "import") openImport();
@@ -196,7 +196,7 @@
   }, true);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
 
-  // ---- import: files in library/additions (raw .md, PDF, EPUB) -> library/private or library/own ----
+  // ---- import: files in corpus/catalog/inbox (raw .md, PDF, EPUB) -> corpus/library/private or corpus/library/own ----
   var LANGS = { eng: "English", lat: "Latin", grc: "Greek" };
   function loadInbox() {
     return fetch("/__edit/inbox").then(function (r) { return r.json(); })
@@ -287,13 +287,13 @@
     if (old) old.remove();
     var box = document.createElement("div");
     box.className = "ed-imp";
-    box.innerHTML = "<h3>Import into the library</h3><p class=\"ed-msg\">Files in <code>library/additions</code>: raw Markdown, " +
+    box.innerHTML = "<h3>Import into the library</h3><p class=\"ed-msg\">Files in <code>corpus/catalog/inbox</code>: raw Markdown, " +
       "or a book as PDF or EPUB. Each is formatted for the reader (speakers, stage directions, the book's line numbers) and saved " +
       "under its id. For a book, pick the part that holds the text and check it with <b>Preview</b> first. " +
       "<b>Private</b> texts are read on this computer only and are never committed or published: use it for anything " +
       "still in copyright. <b>Library</b> texts are published with the site.</p>" +
       '<p><label class="up"><input type="file" accept=".md,.pdf,.epub" multiple hidden><span>Add a file…</span></label> ' +
-      '<span class="ed-msg">copies a .md, .pdf or .epub from anywhere on this computer into library/additions</span></p>' +
+      '<span class="ed-msg">copies a .md, .pdf or .epub from anywhere on this computer into corpus/catalog/inbox</span></p>' +
       (inbox.length ? inbox.map(fileRow).join("") : '<p class="ed-msg">Nothing waiting.</p>') +
       '<div style="margin-top:.8rem"><button data-a="close">Close</button><button data-a="rebuild-after">Rebuild to see imports</button></div>';
     document.body.appendChild(box);

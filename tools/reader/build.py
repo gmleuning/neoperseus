@@ -11,10 +11,9 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import edits as text_edits
-from . import library
+from . import library, paths
 
-ROOT = Path(__file__).resolve().parent.parent
-ASSETS = ROOT / "assets"
+ROOT = paths.ROOT
 ORIGINAL = {"grc", "lat"}
 LANG_NAMES = {"grc": "Greek", "lat": "Latin", "eng": "English", "it": "Italian", "fr": "French", "de": "German",
               "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "el": "Greek"}
@@ -582,7 +581,7 @@ def edition_head(meta, others, current, kind):
     return f"<div><b>{lang}</b> {html.escape(name)}</div>"
 
 
-# ---- groups for authors with many works (catalog/groups.tsv) ----------------------
+# ---- groups for authors with many works (corpus/catalog/groups.tsv) ----------------------
 def load_groups(path):
     rules = defaultdict(list)
     if path.exists():
@@ -643,9 +642,9 @@ def write_search_data(site, wid, author, title, parts):
 
 
 EDITS = None          # the edit rules used by the last build (for reporting unmatched ones)
-STATE_DIR = ROOT / ".buildcache"
-GLOBAL_ASSETS = ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "search.js",
-                 "beacon.jpg", "beacon-tall.jpg")
+STATE_DIR = paths.SITE_CACHE
+CODE_FILES = ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "search.js")
+IMAGE_FILES = ("beacon.jpg", "beacon-tall.jpg")
 
 
 # ---- what is in the library, read cheaply ------------------------------------------------------
@@ -912,10 +911,14 @@ def assemble(results, rules):
 
 
 def copy_assets(site, extra=()):
+    """The site's code (site/code), images and fonts (assets/) into the built site."""
     site.mkdir(parents=True, exist_ok=True)
-    for name in GLOBAL_ASSETS + tuple(extra):
-        if (ASSETS / name).exists():
-            shutil.copy(ASSETS / name, site / name)
+    for name in CODE_FILES + tuple(extra):
+        shutil.copy(paths.SITE_CODE / name, site / name)
+    for name in IMAGE_FILES:
+        shutil.copy(paths.IMAGES / name, site / name)
+    shutil.copytree(paths.FONTS, site / "fonts", dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("PPEditorialNew*"))      # a licensed font that is not published
 
 
 def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=None, stats=None):
@@ -927,7 +930,7 @@ def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=No
     stats = stats if stats is not None else {}
     stats.update({"cached": 0, "made": 0, "removed": 0})
     fp = fingerprint()
-    rules = load_groups(ROOT / "catalog" / "groups.tsv")
+    rules = load_groups(paths.GROUPS_TSV)
     EDITS = text_edits.Rules(lib_dir / "edits.tsv")
 
     # 1. the public site: every work, without library/private
@@ -955,7 +958,7 @@ def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=No
     merged.update(loc)
     entries, shelf, report = assemble(merged, rules)
     local_site.mkdir(parents=True, exist_ok=True)
-    shutil.copy(ASSETS / "catalog.js", local_site / "catalog.js")
+    shutil.copy(paths.SITE_CODE / "catalog.js", local_site / "catalog.js")
     write_library(local_site, entries, local=True)
     write_search_page(local_site, entries, local=True)
     write_catalog(local_site, catalog, {e["work"] for e in entries})
@@ -1095,8 +1098,8 @@ def write_search_page(site, entries, local=False):
 
 
 def catalog_rows(catalog, on_shelf):
-    """One row per work in any public-domain repository we list: Perseus (catalog/catalog.json) and
-    Wikisource pairs (catalog/wikisource.json, made by tools/wikisource_catalog.py).
+    """One row per work in any public-domain repository we list: Perseus (corpus/catalog/catalog.json) and
+    Wikisource pairs (corpus/catalog/wikisource.json, made by tools/wikisource_catalog.py).
     [id, author, title, original title, languages, English editions, on shelf, source]"""
     rows = []
     for w in (catalog or {}).get("works", []):
@@ -1105,7 +1108,7 @@ def catalog_rows(catalog, on_shelf):
         trans = [e["description"] for e in w["editions"] if e["lang"] == "eng"]
         rows.append([w["id"], catalog["authors"].get(w["author"], w["author"]), w["title"], orig,
                      "+".join(langs), len(trans), 1 if w["id"] in on_shelf else 0, "perseus"])
-    ws = ROOT / "catalog" / "wikisource.json"
+    ws = paths.WIKISOURCE_JSON
     if ws.exists():
         for w in json.loads(ws.read_text(encoding="utf-8"))["works"]:
             work = w["id"].rsplit(".", 1)[0]

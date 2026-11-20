@@ -22,7 +22,7 @@ format is what it is, what each source tends to get wrong, and the routine for f
    written in both files is a hinge: the page is cut at every key both files share, and the two pieces
    are laid side by side. Where keys are missing or do not match, nothing is lost. The text simply pairs
    in bigger blocks.
-4. **Every build reports how well each pair matched** (`site-local/_sync.md`, and a `check sync:` line
+4. **Every build reports how well each pair matched** (`site/local/_sync.md`, and a `check sync:` line
    printed when a pair is under 90%). That number is your to-do list.
 5. **Public, private and generated are decided by folder** (section 3), so a revised text is also a
    decision about who may see it.
@@ -73,22 +73,22 @@ a pairing key; `[^n]` / `[^n]: note` notes; `¶` a prose paragraph inside verse;
 
 | Folder | Meaning | Published? | Committed? |
 |---|---|---|---|
-| `library/perseus/` | converted Perseus texts. **Generated**, replaced on the next conversion. | yes | no |
-| `library/own/` | texts you add and revise. **Yours**, edit freely. | **yes** | yes |
-| `library/private/` | texts you may read but may not publish (in copyright). | never; local only | no |
-| `library/additions/` | the inbox: raw files, PDFs, EPUBs, old scripts. | not unless a file has a `work:` header | no |
-| `library/preowned/` | files that came from elsewhere and are not sorted yet. | same rule as `additions/` | no |
+| `corpus/library/perseus/` | converted Perseus texts. **Generated**, replaced on the next conversion. | yes | no |
+| `corpus/library/own/` | texts you add and revise. **Yours**, edit freely. | **yes** | yes |
+| `corpus/library/private/` | texts you may read but may not publish (in copyright). | never; local only | no |
+| `corpus/catalog/inbox/` | the inbox: raw files, PDFs, EPUBs waiting to be imported. | never built | no |
+| `corpus/catalog/unsorted/` | files that came from elsewhere and are not sorted yet. | never built | no |
 
 Two consequences you should keep in mind:
 
-- **Everything the catalog Add button imports goes to `library/own/`, which is published.** Wikisource is
+- **Everything the catalog Add button imports goes to `corpus/library/own/`, which is published.** Wikisource is
   mostly public domain, but a translation on Wikisource can still be in copyright in your country, and an
-  import may carry text you did not mean to publish. If in doubt, **move the file to `library/private/`**
-  before you do anything else. (Publish commits `library/own/`.)
-- A file with a `work:` header is built wherever it sits under `library/`, even in `additions/`. If you do
-  not want it on the site, take the header off or move it.
+  import may carry text you did not mean to publish. If in doubt, **move the file to `corpus/library/private/`**
+  before you do anything else. (Publish commits `corpus/library/own/`.)
+- Only `corpus/library/` is built. A file with a `work:` header anywhere under it is published (unless it is in
+  `private/`); files in `inbox/` and `unsorted/` are never built, whatever their headers say.
 
-The public site (`site/`) is built without `library/private/`. The local overlay (`site-local/`, served
+The public site (`site/public/`) is built without `corpus/library/private/`. The local overlay (`site/local/`, served
 by `python perseus.py edit`) adds it. See README, "Two sites, one build".
 
 ---
@@ -148,7 +148,7 @@ Each source fails in its own, predictable ways. Check those first.
   and prefaces to remove; notes that are fine in one edition and absent in another.
 - **Revision:** edit rules, not the file (section 8), because the file is regenerated.
 
-### Wikisource through the catalog (Add, `reader/wikisource_fetch.py`)
+### Wikisource through the catalog (Add, `tools/reader/wikisource_fetch.py`)
 
 - **What it does.** The original is the catalog row's page on its own Wikisource (a chapter list if it
   has subpages, otherwise the one page). The English side is found by reading the hub page on English
@@ -219,7 +219,7 @@ builds are incremental (only the work you changed is rebuilt).
    anything else if it came from Add.
 2. **Build.** `python perseus.py build`. The last lines list every pair under 90% and any edit rules that
    no longer match.
-3. **Read the sync report.** Open `site-local/_sync.md`: one row per pair with `shared`, `translation
+3. **Read the sync report.** Open `site/local/_sync.md`: one row per pair with `shared`, `translation
    numbers`, `coverage`.
 
    | Coverage | Usually means | First thing to do |
@@ -242,7 +242,7 @@ builds are incremental (only the work you changed is rebuilt).
 5. **Open the page** (`python perseus.py edit`, the work's page). Read the first screen and the end, switch
    Blocks and Lines, scan the contents list. Things to catch: a first row that is only a title, a heading
    in the middle of a paragraph, a poem that has run together, a passage with no partner opposite.
-6. **Fix the file.** Edit `library/own/….md` (or `private/`) in any editor. Common repairs:
+6. **Fix the file.** Edit `corpus/library/own/….md` (or `private/`) in any editor. Common repairs:
    - **Delete what is not text.** Licence lines, "Contents", repeated titles, the page's own heading.
      In edit mode you can Alt-click a paragraph to delete it as a rule (section 8). In your own file,
      just delete the lines.
@@ -261,11 +261,11 @@ builds are incremental (only the work you changed is rebuilt).
    coverage and the page are acceptable. "Acceptable" is your call: a one-block pair of a short story is
    fine; a drama with 40% coverage is not.
 8. **Keep a record if you reviewed the translation itself.** For a text you have proofread against its
-   original, write a short log in `reviews/<work>-<part>.md`: each change, its category (mechanical,
+   original, write a short log in `corpus/reviews/<work>-<part>.md`: each change, its category (mechanical,
    style, fidelity to the original), and what you left alone and why. The Book IV review of Martianus
-   Capella (`reviews/martianus-book4.md`) is the model.
-9. **Publish** when satisfied (Publish in edit mode, or `.\deploy.ps1 -Build`). Publish builds `site/`
-   without private texts, commits `library/edits.tsv` and `library/own/`, pushes, and deploys `site/`.
+   Capella (`corpus/reviews/martianus-book4.md`) is the model.
+9. **Publish** when satisfied (Publish in edit mode, or `.\tools\deploy.ps1 -Build`). Publish builds `site/public/`
+   without private texts, commits `corpus/library/edits.tsv` and `corpus/library/own/`, pushes, and deploys `site/public/`.
 
 ### A worked example: "The Bet"
 
@@ -279,7 +279,7 @@ the two texts have different numbers of paragraphs, so they are paired as one bl
 ```
 
 `_sync.md` reported 1 of 1 (100%), which really means "one block each". Two things to improve, in
-`library/own/ws.the-bet.ru-wikisource.md` and `ws.the-bet.eng-wikisource.md`:
+`corpus/library/own/ws.the-bet.ru-wikisource.md` and `ws.the-bet.eng-wikisource.md`:
 
 - The English begins with title lines that became paragraphs (`{{1}} THE BET`, then `THE BET`, then `I`).
   Delete the repeated title and turn `I` into a heading `## I`. Check the Russian for the same.
@@ -296,15 +296,15 @@ paragraph-level figure, which you can now trust.
 
 | Where the text lives | How to change it |
 |---|---|
-| `library/own/`, `library/private/` | **edit the file.** It is yours and is never regenerated. |
-| `library/perseus/` | **an edit rule** in `library/edits.tsv`, because the file is replaced the next time the work is converted. Alt-click a paragraph in edit mode, or write the rule by hand. |
+| `corpus/library/own/`, `corpus/library/private/` | **edit the file.** It is yours and is never regenerated. |
+| `corpus/library/perseus/` | **an edit rule** in `corpus/library/edits.tsv`, because the file is replaced the next time the work is converted. Alt-click a paragraph in edit mode, or write the rule by hand. |
 
 An edit rule is `text id<TAB>delete<TAB>opening words of the paragraph`. It finds the paragraph by its
 opening words as the reader shows them (without keys, note marks or markup), so it survives a
 re-conversion. If upstream changes the text, the build prints `edit not applied (text changed?)` and
 lists the rule; fix or remove it.
 
-If you want to make *substantial* changes to a Perseus text, copy the converted file to `library/own/`,
+If you want to make *substantial* changes to a Perseus text, copy the converted file to `corpus/library/own/`,
 give it a new `id`, change its `work`, and edit it there; it is then yours.
 
 ---
@@ -327,9 +327,9 @@ python perseus.py build --public         # only site/ (what is deployed)
 python perseus.py edit                   # http://127.0.0.1:8790: Catalog, Import…, Alt-click delete, Rebuild, Publish
 python perseus.py find euripides         # find a Perseus work id
 python tools/wikisource_catalog.py       # refresh the Wikisource list in the catalog
-.\deploy.ps1 -Build                      # build site/ and upload it
-.\deploy.ps1 -Check                      # check site/ against Cloudflare's limits, upload nothing
+.\tools\deploy.ps1 -Build                      # build site/ and upload it
+.\tools\deploy.ps1 -Check                      # check site/ against Cloudflare's limits, upload nothing
 ```
 
-Files: `site-local/_sync.md` the pairing report; `library/edits.tsv` the edit rules; `reviews/` your
-proofreading logs; `.buildcache/` what was built from what (safe to delete; the next build is just slower).
+Files: `site/local/_sync.md` the pairing report; `corpus/library/edits.tsv` the edit rules; `corpus/reviews/` your
+proofreading logs; `site/cache/` what was built from what (safe to delete; the next build is just slower).

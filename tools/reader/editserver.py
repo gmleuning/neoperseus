@@ -1,6 +1,6 @@
-"""Local edit mode: `python perseus.py edit` serves site/ on this computer only and adds the
-editing tools (assets/edit.js) to each page as it is served. The built pages, and so the public
-site, never contain them. Edits are rules in library/edits.tsv (see reader/edits.py); Publish
+"""Local edit mode: `python perseus.py edit` serves site/public/ on this computer only and adds the
+editing tools (site/code/edit.js) to each page as it is served. The built pages, and so the public
+site, never contain them. Edits are rules in corpus/library/edits.tsv (see reader/edits.py); Publish
 rebuilds, commits that file, pushes to GitHub and deploys to Cloudflare Pages."""
 import json
 import os
@@ -13,14 +13,15 @@ from pathlib import Path
 
 from . import edits as text_edits
 from . import importer
+from . import paths
 from . import sources
 
-ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "site"
-SITE_LOCAL = ROOT / "site-local"
-RULES = ROOT / "library" / "edits.tsv"
-INBOX = ROOT / "library" / "additions"          # raw files waiting to be imported
-DEST = {"private": ROOT / "library" / "private", "own": ROOT / "library" / "own"}
+ROOT = paths.ROOT
+SITE = paths.SITE_PUBLIC
+SITE_LOCAL = paths.SITE_LOCAL
+RULES = paths.EDITS_TSV
+INBOX = paths.INBOX                              # raw files waiting to be imported
+DEST = {"private": paths.LIBRARY_PRIVATE, "own": paths.LIBRARY_OWN}
 _catalog = None
 
 
@@ -33,7 +34,7 @@ def catalog():
 
 
 def shelf():
-    d = ROOT / "library" / "perseus"
+    d = paths.LIBRARY_PERSEUS
     return {p.name for p in d.iterdir()} if d.is_dir() else set()
 
 
@@ -51,7 +52,7 @@ def book_pages(p):
 
 
 def inbox():
-    """Files in library/additions waiting to be imported: raw .md (no library front matter),
+    """Files in corpus/catalog/inbox waiting to be imported: raw .md (no library front matter),
     PDF and EPUB books, with guessed details."""
     out = []
     if not INBOX.is_dir():
@@ -72,7 +73,7 @@ def book_parts(name):
     """The verse parts found in a book, best first, for the Import panel."""
     src = INBOX / Path(name).name
     if src.suffix.lower() not in BOOKS or not src.is_file():
-        raise ValueError("not a PDF or EPUB in library/additions")
+        raise ValueError("not a PDF or EPUB in corpus/catalog/inbox")
     pages = book_pages(src)
     parts = sources.parts(pages)
     for p in parts:
@@ -83,7 +84,7 @@ def book_parts(name):
 def do_import(b, preview=False):
     src = INBOX / Path(b["file"]).name
     if not src.is_file():
-        raise ValueError("file not found in library/additions")
+        raise ValueError("file not found in corpus/catalog/inbox")
     dest = DEST.get(b.get("dest"))
     if dest is None and not preview:
         raise ValueError("destination must be private or own")
@@ -115,14 +116,14 @@ def do_import(b, preview=False):
 
 
 def save_upload(name, data):
-    """A file chosen in the Import panel, copied into library/additions."""
+    """A file chosen in the Import panel, copied into corpus/catalog/inbox."""
     name = Path(name).name
     if Path(name).suffix.lower() not in ACCEPT or name.startswith("."):
         raise ValueError("only .md, .pdf and .epub files")
     INBOX.mkdir(parents=True, exist_ok=True)
     (INBOX / name).write_bytes(data)
     return {"ok": True, "file": name}
-EDIT_JS = ROOT / "assets" / "edit.js"
+EDIT_JS = paths.SITE_CODE / "edit.js"
 INJECT = b'<script src="/__edit/edit.js"></script>\n</body>'
 
 
@@ -217,13 +218,13 @@ def publish_steps():
     def commit():
         subprocess.run(["git", "add", str(RULES.relative_to(ROOT))], cwd=ROOT, check=True)
         if DEST["own"].is_dir():           # texts imported into the public library
-            subprocess.run(["git", "add", "library/own"], cwd=ROOT, check=True)
+            subprocess.run(["git", "add", str(paths.LIBRARY_OWN.relative_to(ROOT))], cwd=ROOT, check=True)
         if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT).returncode == 0:
             return "no new edits to commit"
         n = len(text_edits.Rules(RULES).rules)
-        subprocess.run(["git", "commit", "-m", f"Text edits ({n} rule{'s' if n != 1 else ''} in library/edits.tsv)"],
+        subprocess.run(["git", "commit", "-m", f"Text edits ({n} rule{'s' if n != 1 else ''} in corpus/library/edits.tsv)"],
                        cwd=ROOT, check=True, capture_output=True)
-        return "committed library/edits.tsv"
+        return "committed corpus/library/edits.tsv"
     shell = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "deploy.ps1"] \
         if os.name == "nt" else ["pwsh", "-File", "deploy.ps1"]
     # deploy.ps1 uploads site/, which the build above has just brought up to date (no private texts in it)

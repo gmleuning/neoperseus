@@ -1,4 +1,4 @@
-"""Build catalog/catalog.json from local checkouts of the Perseus canonical repos.
+"""Build corpus/catalog/catalog.json from local checkouts of the Perseus canonical repos.
 
 The catalog lists every work in PerseusDL/canonical-greekLit and canonical-latinLit:
 author, title, and each edition or translation file that actually exists in the repo.
@@ -23,7 +23,9 @@ from pathlib import Path
 
 from lxml import etree
 
-ROOT = Path(__file__).resolve().parent.parent
+from reader import paths
+
+ROOT = paths.ROOT
 CTS = "{http://chs.harvard.edu/xmlns/cts}"
 XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 FILE_RE = re.compile(r"^data/([^/]+)/([^/]+)/([^/]+\.([a-z0-9-]+?)\.xml)$")
@@ -108,7 +110,7 @@ def main(repos):
         catalog["sources"][name] = {"repo": f"PerseusDL/canonical-{name}", "commit": commit}
         catalog["authors"].update(authors)
         catalog["works"].extend(works)
-    out = ROOT / "catalog" / "catalog.json"
+    out = paths.CATALOG_JSON
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(catalog, ensure_ascii=False, indent=1), encoding="utf-8")
     n_ed = sum(len(w["editions"]) for w in catalog["works"])

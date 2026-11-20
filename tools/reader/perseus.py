@@ -6,13 +6,13 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import tei
+from . import paths, tei
 
-ROOT = Path(__file__).resolve().parent.parent
-CATALOG = ROOT / "catalog" / "catalog.json"
-CORPUS = ROOT / "corpus"
-LIBRARY = ROOT / "library" / "perseus"
-SHELF = ROOT / "shelf.txt"
+ROOT = paths.ROOT
+CATALOG = paths.CATALOG_JSON
+CORPUS = paths.SOURCES              # downloaded Perseus XML
+LIBRARY = paths.LIBRARY_PERSEUS
+SHELF = paths.SHELF
 LANGS = {"grc", "lat", "eng"}
 
 

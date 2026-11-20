@@ -1,12 +1,12 @@
 """Build the dictionaries the reader's side panel uses (run: python perseus.py dictionaries).
 
-Sources, downloaded once into corpus/dict/:
+Sources, downloaded once into corpus/catalog/sources/dict/:
 - LSJ, A Greek-English Lexicon: PerseusDL/lexica (27 files, about 270 MB), CC BY-SA.
 - Lewis & Short, A Latin Dictionary: PerseusDL/lexica (2 files, about 155 MB), CC BY-SA.
 - Greek Morpheus forms (inflected form -> headword and parse): gcelano/LemmatizedAncientGreekXML,
   CC BY-NC 4.0 (fine for personal use; do not publish the built site commercially).
 
-Output goes to site/dict/ as small script files grouped by the first two letters, because a
+Output goes to site/public/dict/ as small script files grouped by the first two letters, because a
 page opened from disk may load scripts but may not read other files.
 """
 import html
@@ -21,8 +21,10 @@ from lxml import etree
 
 from .perseus import download
 
-ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "corpus" / "dict"
+from . import paths
+
+ROOT = paths.ROOT
+SRC = paths.SOURCES / "dict"
 LEXICA = "https://raw.githubusercontent.com/PerseusDL/lexica/master/CTS_XML_TEI/perseus/pdllex"
 MORPHEUS = "https://raw.githubusercontent.com/gcelano/LemmatizedAncientGreekXML/master/Morpheus/MorpheusUnicode.xml.zip"
 

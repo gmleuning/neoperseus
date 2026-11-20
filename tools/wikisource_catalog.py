@@ -1,10 +1,10 @@
-"""Build catalog/wikisource.json: Wikisource works that exist in English and in another language.
+"""Build corpus/catalog/wikisource.json: Wikisource works that exist in English and in another language.
 
 It reads the translation hub pages on English Wikisource (Category:Translations_pages) and
 asks the MediaWiki API for their interwiki language links, so each row pairs an English page
 with a page on another Wikisource (grc, la, it, fr ...). The catalog page lists these rows next
 to the Perseus works; "Add" there downloads both pages as EPUBs and imports them
-(reader/wikisource_fetch.py).
+(tools/reader/wikisource_fetch.py).
 
     python tools/wikisource_catalog.py                  # the default languages
     python tools/wikisource_catalog.py --langs el la it fr de
@@ -23,8 +23,10 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "catalog" / "wikisource.json"
+from reader import paths
+
+ROOT = paths.ROOT
+OUT = paths.WIKISOURCE_JSON
 API = "https://en.wikisource.org/w/api.php"
 AGENT = "neoperseus-catalog/1.0 (personal reader; one-off catalog build)"
 DEFAULT_LANGS = ["grc", "el", "la", "it", "fr", "de", "es", "pt", "ru", "zh", "ja"]

@@ -1,6 +1,6 @@
-"""Add a Wikisource work from the catalog (catalog/wikisource.json) to library/own, both sides.
+"""Add a Wikisource work from the catalog (corpus/catalog/wikisource.json) to corpus/library/own, both sides.
 
-It follows what worked in the trial scripts (library/additions/fetch_*.py), made generic:
+It follows what worked in the trial scripts (tools/legacy/fetch_*.py), made generic:
 
   1. The original: the catalog row's page on its own Wikisource. If it has subpages (a chapter
      list) they are fetched in order; otherwise the page itself.
@@ -10,7 +10,7 @@ It follows what worked in the trial scripts (library/additions/fetch_*.py), made
      (div.poem) become verse, everything else prose paragraphs.
   4. Chapters are keyed {{n}} or {{part.n}} from the numbers in their titles, Roman or Arabic or
      spelled out (Chapter XIV, Capítulo 14, Libro primero), so the two sides pair on the same
-     key. A site build reports how many keys matched (site/_sync.md).
+     key. A site build reports how many keys matched (site/local/_sync.md).
 
 The result is a draft to look over.
 """
@@ -25,8 +25,10 @@ from pathlib import Path
 
 from lxml import html as lhtml
 
-ROOT = Path(__file__).resolve().parent.parent
-CATALOG = ROOT / "catalog" / "wikisource.json"
+from . import paths
+
+ROOT = paths.ROOT
+CATALOG = paths.WIKISOURCE_JSON
 AGENT = "neoperseus/1.0 (personal reader; polite, one page at a time)"
 CODE = {"el": "grc", "la": "lat", "en": "eng"}      # Wikisource language code -> library code
 DELAY = 0.7
@@ -78,7 +80,7 @@ def find(wid):
     for w in json.loads(CATALOG.read_text(encoding="utf-8"))["works"]:
         if w["id"] == wid:
             return w
-    raise KeyError(f"not in catalog/wikisource.json: {wid}")
+    raise KeyError(f"not in corpus/catalog/wikisource.json: {wid}")
 
 
 def page_of(url):
@@ -349,7 +351,7 @@ def edition_of(title):
 def add(wid, dest=None, log=log_default, translation=""):
     """Original and English both. `translation` is an English Wikisource address to use instead of the hub's first."""
     w = find(wid)
-    dest = Path(dest or ROOT / "library" / "own")
+    dest = Path(dest or paths.LIBRARY_OWN)
     work = work_of(wid)
     olang, otitle = page_of(w["orig_url"])
     opages = fetch_work(olang, otitle, log)
@@ -388,5 +390,5 @@ def add_translation(wid, url, dest=None, log=log_default):
     epages = fetch_work("en", etitle, log)
     if not epages:
         raise RuntimeError(f"no text found on {url}")
-    return [write_side(dest or ROOT / "library" / "own", work_of(wid), w["en_title"], author_of(olang, otitle),
+    return [write_side(dest or paths.LIBRARY_OWN, work_of(wid), w["en_title"], author_of(olang, otitle),
                        "en", etitle, epages, edition_of(etitle), olang, log)]

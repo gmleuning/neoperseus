@@ -1,7 +1,7 @@
 # Library format
 
 Every text the reader shows is a Markdown file in `library/`. Converters write these files
-(`library/perseus/` from Perseus, `library/own/` from Wikisource or by hand), and the builder
+(`corpus/library/perseus/` from Perseus, `corpus/library/own/` from Wikisource or by hand), and the builder
 reads only these files. Converters can change, and the reader can be restyled, without the
 library files ever needing to change.
 
@@ -65,5 +65,5 @@ starts a new row.
 
 So keys have to be written the same way on both sides. Perseus texts already agree. For your
 own texts, use the citation system of the original (Bekker, Stephanus, Diels–Kranz fragment
-numbers, book.line). `site-local/_sync.md` lists, for every pairing, how many of the translation's
+numbers, book.line). `site/local/_sync.md` lists, for every pairing, how many of the translation's
 keys found a partner; anything under 90% is flagged when you build.

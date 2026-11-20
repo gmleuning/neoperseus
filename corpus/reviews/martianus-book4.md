@@ -1,6 +1,6 @@
 # Martianus Capella, Book IV (Dialectic): English review
 
-Changes to `library/own/martianus.nuptiis.eng.md`, sections 327–424.
+Changes to `corpus/library/own/martianus.nuptiis.eng.md`, sections 327–424.
 Categories: **A** mechanical, **B** style, **C** fidelity to the Latin.
 
 Across the book, the tics “in such wise (that)” (26×) and “in this wise” (14×) became “in such a way (that)”, “as when” and “thus”. The archaic register (thou, hath) is kept, because the rest of the translation uses it.
