@@ -427,7 +427,7 @@
     var sections = sectionsAndGroups(chunk(levents, revents).chunks);
     var L = new Side("L", orig.meta.layout || "prose", orig.notes);
     var R = two ? new Side("E", trans.meta.layout || "prose", trans.notes) : null;
-    var llang = HTML_LANG[orig.meta.language] || "en", rlang = two ? (HTML_LANG[trans.meta.language] || "en") : "en";
+    var llang = HTML_LANG[orig.meta.language] || orig.meta.language || "en", rlang = two ? (HTML_LANG[trans.meta.language] || trans.meta.language || "en") : "en";
     var body = [], toc = [];
     var fcols = [[L, orig.meta, "g " + L.layout, llang]];
     if (two) fcols.push([R, trans.meta, "e " + R.layout, rlang]);

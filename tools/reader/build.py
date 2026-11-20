@@ -989,16 +989,20 @@ def top_links(current, local=False):
             f'aria-expanded="false" aria-controls="settings">Settings</button></nav>')
 
 
+def langs_note(entries):
+    k = len({e.get("orig") or e.get("lang") for e in entries})
+    return f" in {k} languages" if k > 1 else ""
+
+
 def write_library(site, entries, local=False):
     data = json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
     n = len(entries)
     main = f"""<main class="lib">
 <div class="lib-top">{LOGO}<h1>Library</h1>{top_links("library.html", local)}</div>
-<p class="count">{n} work{"s" if n != 1 else ""}</p>
+<p class="count">{n} work{"s" if n != 1 else ""}{langs_note(entries)}</p>
 <section id="continue-wrap" hidden><h3 class="label">Continue reading</h3><div class="continue" id="continue"></div></section>
 <div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
-<div class="chips" id="langs" role="group" aria-label="Language">
-<button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button></div></div>
+<div class="chips shelves" id="langs" role="group" aria-label="Original language"></div></div>
 <div class="library-grid"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
 <noscript><p>The library list needs JavaScript.</p></noscript>
 </main>"""

@@ -302,13 +302,16 @@
   }
 
 
-  // ---- English words: Wiktionary, consulted live (its public REST API) ---------------------
-  // Same panel as the dictionaries. Definitions and examples come from /page/definition; IPA,
+  // ---- Wiktionary, consulted live (its public REST API) -------------------------------------
+  // For English words, and for words in an original that is neither Greek nor Latin (Russian,
+  // Chinese, French…): the entry for that text's language is shown first. Same panel as the dictionaries. Definitions and examples come from /page/definition; IPA,
   // recordings and the etymology (drawn as a timeline) from /page/html. Settings: "English words".
   var WK = "https://en.wiktionary.org/api/rest_v1/page/";
   var OK_TAGS = { A: 1, I: 1, B: 1, EM: 1, STRONG: 1, SPAN: 1, SUP: 1, SUB: 1, SMALL: 1, ABBR: 1 };
   var DROP_TAGS = { STYLE: 1, SCRIPT: 1, LINK: 1, IMG: 1, UL: 1, OL: 1, DL: 1, TABLE: 1, FIGURE: 1, AUDIO: 1 };
-  var wkSeq = 0, player = null, MAX_DEFS = 6;
+  var wkSeq = 0, player = null, MAX_DEFS = 6, wkLang = "en";
+  var WK_NAMES = { en: "English", ru: "Russian", zh: "Chinese", ja: "Japanese", fr: "French", it: "Italian",
+    de: "German", es: "Spanish", pt: "Portuguese", el: "Greek", uk: "Ukrainian" };
   function opt(k, d) { var v = S && S.get(k); return v == null ? d : v; }
   function wkClean(html) {
     var t = document.createElement("template");
@@ -421,13 +424,15 @@
     return '<ol class="defs">' + items.slice(0, MAX_DEFS).join("") + '</ol><details class="more"><summary>' +
       (items.length - MAX_DEFS) + ' more senses</summary><ol class="defs" start="' + (MAX_DEFS + 1) + '">' + items.slice(MAX_DEFS).join("") + "</ol></details>";
   }
-  function wiki(word) {
+  function wiki(word, lang) {
     word = word.trim();
     if (!word) return;
+    lang = (lang || "en").split("-")[0];
+    wkLang = lang;
     var seq = ++wkSeq;
     open();
     var out = panel.querySelector("#dict-out");
-    panel.querySelector("#dict-title").innerHTML = '<span lang="en">' + esc(word) + "</span>";
+    panel.querySelector("#dict-title").innerHTML = '<span lang="' + esc(lang) + '">' + esc(word) + "</span>";
     out.innerHTML = '<p class="note">Looking up Wiktionary…</p>';
     var wantPage = opt("wkety", "timeline") !== "off" || opt("wkipa", "on") === "on" || opt("wkaudio", "on") === "on";
     var t = function (w) { return encodeURIComponent(w.replace(/ /g, "_")); };
@@ -444,10 +449,15 @@
       var page = "https://en.wiktionary.org/wiki/" + t(used);
       var foot = '<p class="wkf"><a href="' + page + '" target="_blank" rel="noopener">Open on Wiktionary ↗</a></p>';
       if (!data) { out.innerHTML = '<p class="note">No Wiktionary entry for “' + esc(word) + "”.</p>" + foot; return; }
-      panel.querySelector("#dict-title").innerHTML = '<span lang="en">' + esc(used) + "</span>";
+      panel.querySelector("#dict-title").innerHTML = '<span lang="' + esc(lang) + '">' + esc(used) + "</span>";
       var langs = opt("wklangs", "en");
-      var codes = Object.keys(data).filter(function (c) { return langs === "all" || c === "en"; });
-      codes.sort(function (a, b) { return (b === "en") - (a === "en") || (data[a][0].language || a).localeCompare(data[b][0].language || b); });
+      var codes = Object.keys(data).filter(function (c) { return langs === "all" || c === lang; });
+      var note = "";
+      if (!codes.length) {          // nothing under the text's language: show what there is
+        codes = Object.keys(data);
+        note = '<p class="note">No ' + esc(WK_NAMES[lang] || lang) + " entry; other languages:</p>";
+      }
+      codes.sort(function (a, b) { return (b === lang) - (a === lang) || (data[a][0].language || a).localeCompare(data[b][0].language || b); });
       var html = "";
       codes.forEach(function (c) {
         var name = data[c][0].language || c;
@@ -459,9 +469,9 @@
           if (!defs.length) return;
           inner += '<div class="wkp">' + esc(p.partOfSpeech || "") + "</div>" + defsHTML(defs);
         });
-        if (inner) html += '<details class="wkl"' + (c === "en" || codes.length === 1 ? " open" : "") + "><summary>" + esc(name) + "</summary>" + inner + "</details>";
+        if (inner) html += '<details class="wkl"' + (c === lang || codes.length === 1 ? " open" : "") + "><summary>" + esc(name) + "</summary>" + inner + "</details>";
       });
-      out.innerHTML = (html || '<p class="note">No English definitions found.</p>') + foot;
+      out.innerHTML = (html ? note + html : '<p class="note">No definitions found.</p>') + foot;
       panel.querySelector(".body").scrollTop = 0;
     }).catch(function () { if (seq === wkSeq) out.innerHTML = '<p class="note">Wiktionary could not be reached.</p>'; });
   }
@@ -476,12 +486,22 @@
       return true;
     }
     var a = e.target.closest("a[data-w]");
-    if (a) { e.preventDefault(); wiki(a.getAttribute("data-w")); return true; }
+    if (a) { e.preventDefault(); wiki(a.getAttribute("data-w"), wkLang); return true; }
     return false;
   }
 
   // ---- double-clicking a word in the text ----------------------------------------------------
   var WORDCH = /[\p{L}\p{M}’'ʼ]/u;
+  var CJK = { zh: 1, ja: 1, ko: 1 };
+  // in Chinese and Japanese there are no spaces: take the word the browser's segmenter finds, or the one character
+  function cjkWord(text, at) {
+    if (window.Intl && Intl.Segmenter) {
+      var segs = new Intl.Segmenter(undefined, { granularity: "word" }).segment(text);
+      var s = segs.containing(Math.min(at, text.length - 1));
+      if (s && s.isWordLike) return [s.index, s.index + s.segment.length];
+    }
+    return [at, Math.min(at + 1, text.length)];
+  }
   function unmark() {
     if (marked && marked.parentNode) {
       var t = document.createTextNode(marked.textContent);
@@ -504,15 +524,20 @@
   document.addEventListener("dblclick", function (e) {
     var col = e.target.closest && e.target.closest(".col");
     if (!col) return;
-    var lang = col.getAttribute("lang");
-    if (lang === "en") { if (S && S.get("wk") === "off") return; }
-    else if ((S && S.get("dict") !== "on") || !col.classList.contains("g") || (lang !== "grc" && lang !== "la")) return;
+    var lang = col.getAttribute("lang") || "en";
+    var classical = lang === "grc" || lang === "la";
+    if (!classical) {                     // English, or an original in a modern language: Wiktionary
+      if ((S && S.get("wk") === "off") || (lang !== "en" && !col.classList.contains("g"))) return;
+    } else if ((S && S.get("dict") !== "on") || !col.classList.contains("g")) return;
     if (e.target.closest("a, sup, .ln, .mk, .spk, .stage, .notes, button, summary")) return;
     var c = caretAt(e.clientX, e.clientY);
     if (!c || c.node.nodeType !== 3) return;
     var text = c.node.nodeValue, a = c.offset, b = c.offset;
-    while (a > 0 && WORDCH.test(text[a - 1])) a--;
-    while (b < text.length && WORDCH.test(text[b])) b++;
+    if (CJK[lang.split("-")[0]]) { var ab = cjkWord(text, c.offset); a = ab[0]; b = ab[1]; }
+    else {
+      while (a > 0 && WORDCH.test(text[a - 1])) a--;
+      while (b < text.length && WORDCH.test(text[b])) b++;
+    }
     var word = text.slice(a, b).replace(/^[’'ʼ]+/, "");
     if (!word || !/\p{L}/u.test(word)) return;
     unmark();
@@ -522,7 +547,10 @@
     marked.className = "dict-word";
     try { range.surroundContents(marked); } catch (err) { marked = null; }
     word = word.replace(/[’'ʼ]+$/, "") || word;
-    if (lang === "en") wiki(word); else lookup(word, lang);
+    if (classical) return lookup(word, lang);
+    // Wiktionary titles carry no stress marks (Russian пари́ is filed under пари)
+    if (lang !== "en") word = word.normalize("NFD").replace(/[\u0300\u0301]/g, "").normalize("NFC");
+    wiki(word, lang);
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
 })();

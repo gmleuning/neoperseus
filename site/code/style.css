@@ -6,9 +6,9 @@
 @font-face { font-family: "Gentium Book Plus"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/GentiumBookPlus-Regular.ttf) format("truetype"); }
 @font-face { font-family: "Gentium Book Plus"; font-style: italic; font-weight: 400; font-display: swap; src: url(fonts/GentiumBookPlus-Italic.ttf) format("truetype"); }
 /* Spectral has no Greek: limiting it to Latin script lets Greek fall through to the Greek font */
-@font-face { font-family: "Spectral"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/Spectral-Regular.ttf) format("truetype"); unicode-range: U+0000-036F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
-@font-face { font-family: "Spectral"; font-style: italic; font-weight: 400; font-display: swap; src: url(fonts/Spectral-Italic.ttf) format("truetype"); unicode-range: U+0000-036F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
-@font-face { font-family: "Spectral"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/Spectral-Medium.ttf) format("truetype"); unicode-range: U+0000-036F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
+@font-face { font-family: "Spectral"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/Spectral-Regular.ttf) format("truetype"); unicode-range: U+0000-036F, U+0400-052F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
+@font-face { font-family: "Spectral"; font-style: italic; font-weight: 400; font-display: swap; src: url(fonts/Spectral-Italic.ttf) format("truetype"); unicode-range: U+0000-036F, U+0400-052F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
+@font-face { font-family: "Spectral"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/Spectral-Medium.ttf) format("truetype"); unicode-range: U+0000-036F, U+0400-052F, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122; }
 @font-face { font-family: "EB Garamond"; font-style: normal; font-weight: 400 800; font-display: swap; src: url(fonts/EBGaramond.ttf) format("truetype"); }
 @font-face { font-family: "EB Garamond"; font-style: italic; font-weight: 400 800; font-display: swap; src: url(fonts/EBGaramond-Italic.ttf) format("truetype"); }
 @font-face { font-family: "Cardo"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/Cardo-Regular.ttf) format("truetype"); }
@@ -26,9 +26,11 @@
 :root {
   --paper: #f4f5f2; --ink: #1f2329; --muted: #6a707a; --faint: #d3d6da;
   --accent: #a3281f; --hl: #f3dcd8; --panel: #fbfbf9; --mark: #f3e3a6;
-  --font-grc: "Gentium Book Plus"; --font-lat: "Gentium Book Plus"; --font-eng: "Spectral";
+  --font-grc: "Gentium Book Plus"; --font-lat: "Gentium Book Plus"; --font-cyr: "Gentium Book Plus"; --font-eng: "Spectral";
   --gk: var(--font-grc), "Gentium Book Plus", serif;
   --la: var(--font-lat), "Gentium Book Plus", serif;
+  --cy: var(--font-cyr), "Gentium Book Plus", serif;
+  --cjk: "Noto Serif CJK TC", "Noto Serif TC", "Source Han Serif TC", "Songti TC", "PMingLiU", "MingLiU", "SimSun", serif;
   --en: var(--font-eng), var(--font-grc), "Gentium Book Plus", Georgia, serif;
   --fs: 17px; --oscale: 1.1; --lh: 1.6; --page-max: 84rem;
   --bar-h: 3.1rem;
@@ -157,7 +159,11 @@ main { min-width: 0; }
 .col { min-width: 0; }
 .col.g.verse > .ch, .col.e.verse > .ch, .col.g.prose { padding-left: 2.8rem; }
 .col.g { font-family: var(--gk); font-size: calc(1em * var(--oscale)); line-height: calc(var(--lh) - .02); }
-.col.g:lang(la) { font-family: var(--la); }
+/* the original column: Greek in the Greek font, Cyrillic languages in the Cyrillic font, Chinese and
+   Japanese in a CJK serif, and every other language (Latin, French, Italian…) in the Roman font */
+.col.g:not(:lang(grc)) { font-family: var(--la); }
+.col.g:lang(ru), .col.g:lang(uk), .col.g:lang(be), .col.g:lang(bg), .col.g:lang(sr), .col.g:lang(mk), .col.g:lang(cu) { font-family: var(--cy); }
+.col.g:lang(zh), .col.g:lang(ja) { font-family: var(--cjk); }
 .col.g:lang(en) { font-family: var(--en); font-size: 1.04em; line-height: var(--lh); }
 .col.g .spk, .col.g .stage, .col.g .sub, .col.g .notes { font-family: var(--en); }
 html.justify .col.prose { text-align: justify; hyphens: auto; }
@@ -184,7 +190,8 @@ html.ln-off .v .ln { display: none; }
 html.no-mk .mk { display: none; }
 .spk { display: block; margin-top: .55em; color: var(--accent); font-variant-caps: small-caps; letter-spacing: .04em; }
 .col.g .spk { font-family: var(--gk); font-variant-caps: normal; letter-spacing: .02em; font-size: .95em; }
-.col.g:lang(la) .spk { font-family: var(--la); }
+.col.g:not(:lang(grc)) .spk, .col.g:not(:lang(grc)) .stage { font-family: var(--la); }
+.col.g:lang(ru) .spk, .col.g:lang(ru) .stage { font-family: var(--cy); }
 .stage { display: block; font-style: italic; color: var(--muted); margin: .25em 0 .35em; font-size: .92em; }
 .col.g .stage { font-family: var(--gk); font-style: normal; }
 .sub { display: block; margin: .9em 0 .2em; font-family: var(--en); font-style: italic; font-size: .8rem; color: var(--muted); }
@@ -272,6 +279,7 @@ html.drawer-open .bar { padding-right: calc(min(30rem, 100vw) + 1.5rem); }
 .preview { margin: .3rem 0 0; padding: .5rem .7rem; border: 1px dashed var(--faint); border-radius: 6px; font-size: 1.05rem; }
 .preview .pg { font-family: var(--gk); display: block; }
 .preview .pl { font-family: var(--la); display: block; }
+.preview .pc { font-family: var(--cy); display: block; }
 .preview .pe { font-family: var(--en); display: block; color: var(--muted); }
 .reset { margin-top: .6rem; }
 
@@ -306,7 +314,7 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
 .dict .entry a.cit { color: var(--accent); text-decoration: none; border-bottom: 1px dotted currentColor; }
 .dict .entry .q { font-style: normal; }
 .dict .note { color: var(--muted); font-size: .85rem; }
-.col:lang(en) { cursor: text; }
+.col:lang(en), .col.g:not(:lang(grc)):not(:lang(la)) { cursor: text; }
 /* Wiktionary entries (English words) */
 .dict .wkl { margin: .9rem 0 0; }
 .dict .wkl > summary { cursor: pointer; font-weight: 600; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: .2rem 0; border-bottom: 1px solid var(--faint); list-style: none; }
@@ -385,7 +393,10 @@ html.dict-on .col.g:lang(grc), html.dict-on .col.g:lang(la) { cursor: text; }
 .works li a { text-decoration: none; font-size: 1.05rem; }
 .works li a:hover { color: var(--accent); }
 .works .orig { font-family: var(--gk); color: var(--muted); }
-.works .orig:lang(la) { font-family: var(--la); }
+.works .orig:not(:lang(grc)) { font-family: var(--la); }
+.works .orig:lang(ru) { font-family: var(--cy); }
+.works .orig:lang(zh), .works .orig:lang(ja) { font-family: var(--cjk); }
+.shelves .n { font-size: .8em; opacity: .7; }
 .works .who { color: var(--muted); font-size: .85rem; }
 .works .where { color: var(--accent); font-size: .82rem; margin-left: auto; }
 .works .au-tag { color: var(--muted); font-size: .85rem; }
@@ -499,7 +510,7 @@ html.cols-stack .grp.three .col.g { order: -1; }
 
 /* ---- landing page (index.html) -------------------------------------- */
 body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
-.landing main { position: relative; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+.landing main { position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
 .landing .art { position: absolute; inset: 0; }
 .landing .art img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: 50% 49%; }
 .landing .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,8,8,.45) 0%, rgba(10,8,8,0) 22%); }
@@ -514,14 +525,13 @@ body.landing { background: #0d0b0b; color: #ece6df; --accent: #e8574c; }
 .landing .sub { font-family: "Hershey Roman Triplex", var(--en); font-weight: 450; font-style: normal; font-size: clamp(1.1rem, 2.6vw, 2rem); letter-spacing: .18em; text-transform: uppercase; color: #000; margin: 0; white-space: nowrap; }
 .landing .sub span { margin-right: -.18em; }
 .landing .land-credit { position: absolute; z-index: 1; top: 1.1rem; left: 1.6rem; margin: 0; color: #e9dfd6; font-size: .8rem; opacity: .85; }
-@media (max-width: 700px) {      /* phones: the titles sit above the fire, colours swapped, credit at the bottom */
+@media (max-width: 700px), (orientation: portrait) {   /* phones and upright tablets (the tall picture): the titles sit above the fire, colours swapped, credit at the bottom */
   .landing .land-top { gap: .9rem; padding: .9rem 1rem; font-size: .85rem; }
   .landing .hero { margin: 17vh auto auto; padding: 0 1rem; }
   .landing .sub { letter-spacing: .12em; color: #ece6df; }
   .landing .sub span { margin-right: -.12em; }
   .landing h1, .landing h1 span { color: #000; }
   .landing .land-credit { top: auto; bottom: 1rem; left: 0; right: 0; text-align: center; font-size: .75rem; }
-}
 }
 
 /* front matter (::: blocks): introduction, preface, cast list above the text, not aligned */

@@ -1,5 +1,6 @@
-// Library page (library.html): continue reading, authors on the left, the chosen author's works on the
-// right (grouped for authors with many works), and a finder across everything. Texts kept on
+// Library page (library.html): continue reading, one shelf per original language (chips built from the
+// data), that shelf's authors on the left, the chosen author's works on the right (grouped for authors
+// with many works), and a finder across every shelf. Texts kept on
 // this device (local.js) join the list through LibraryPage.setLocal.
 (function () {
   var base = window.LIBRARY || [], works = base;
@@ -15,8 +16,12 @@
   }
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function langOf(w) { var o = w.orig || w.lang; return o === "lat" ? "lat" : (o === "grc" ? "grc" : "other"); }
-  function langAttr(l) { return l === "grc" ? "grc" : (l === "lat" ? "la" : "en"); }
+  // a work's shelf is the language it was written in, whichever language the edition here is in
+  var LANG_NAMES = { grc: "Greek", lat: "Latin", eng: "English", en: "English", it: "Italian", fr: "French",
+    de: "German", es: "Spanish", pt: "Portuguese", ru: "Russian", zh: "Chinese", ja: "Japanese", el: "Modern Greek" };
+  function langOf(w) { return w.orig || w.lang || "eng"; }
+  function langName(l) { return LANG_NAMES[l] || l; }
+  function langAttr(l) { return l === "lat" ? "la" : (l === "eng" ? "en" : (l || "en")); }
 
   // reading positions saved by the reader pages
   function position(page) {
@@ -61,16 +66,33 @@
   renderContinue();
   index();
 
-  var lang = "all", current = null;
-  var LANG_HEAD = { grc: "Greek", lat: "Latin", other: "Other" };
+  var lang = null, current = null, shelves = [];
+
+  // shelves, largest first; each shows how many works it holds
+  function renderShelves() {
+    var count = {};
+    works.forEach(function (w) { var l = langOf(w); count[l] = (count[l] || 0) + 1; });
+    shelves = Object.keys(count).sort(function (a, b) { return count[b] - count[a] || (langName(a) < langName(b) ? -1 : 1); });
+    if (shelves.indexOf(lang) < 0) lang = shelves[0] || null;
+    $("langs").innerHTML = shelves.map(function (l) {
+      return '<button type="button" data-l="' + esc(l) + '" aria-pressed="' + (l === lang) + '">' + esc(langName(l)) +
+        ' <span class="n">' + count[l] + "</span></button>";
+    }).join("");
+  }
+  function setShelf(l) {
+    lang = l;
+    store("lib-lang", l);
+    var all = $("langs").querySelectorAll("button");
+    for (var i = 0; i < all.length; i++) all[i].setAttribute("aria-pressed", String(all[i].getAttribute("data-l") === l));
+  }
 
   function renderAuthors(matching) {
     var html = [];
-    ["grc", "lat", "other"].forEach(function (l) {
-      if (lang !== "all" && lang !== l) return;
+    shelves.forEach(function (l) {
+      if (!matching && lang !== l) return;
       var list = order.filter(function (a) { return a.lang === l && (!matching || matching[a.id]); });
       if (!list.length) return;
-      if (lang === "all") html.push('<div class="lang-head">' + LANG_HEAD[l] + "</div>");
+      if (matching) html.push('<div class="lang-head">' + esc(langName(l)) + "</div>");
       list.forEach(function (a) {
         var n = matching ? matching[a.id] : a.works.length;
         html.push('<button type="button" data-a="' + esc(a.id) + '"' +
@@ -99,7 +121,9 @@
     var a = authors[id];
     if (!a) return;
     current = id;
+    if (a.lang !== lang) setShelf(a.lang);
     store("lib-author", id);
+    store("lib-author:" + a.lang, id);
     if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
     var groups = {}, gorder = [];
     a.works.forEach(function (w) {
@@ -123,7 +147,6 @@
   function renderFind(q) {
     var words = fold(q).split(/\s+/).filter(Boolean);
     var hits = works.filter(function (w) {
-      if (lang !== "all" && langOf(w) !== lang) return false;
       var hay = fold(w.author + " " + w.title + " " + (w.label || "") + " " + (w.translations || []).join(" "));
       return words.every(function (x) { return hay.indexOf(x) >= 0; });
     });
@@ -147,27 +170,28 @@
     var q = this.value.trim();
     if (q) renderFind(q); else renderAuthor(current || (order[0] && order[0].id));
   });
-  var chipsEl = $("langs");
-  chipsEl.addEventListener("click", function (e) {
+  // the author to show on a shelf: the one last opened there, else the first
+  function firstOn(l) {
+    var last = authors[load("lib-author:" + l)];
+    if (last && last.lang === l) return last.id;
+    var a = order.filter(function (x) { return x.lang === l; })[0];
+    return a && a.id;
+  }
+  $("langs").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-l]");
     if (!b) return;
-    lang = b.getAttribute("data-l");
-    var all = chipsEl.querySelectorAll("button");
-    for (var i = 0; i < all.length; i++) all[i].setAttribute("aria-pressed", String(all[i] === b));
-    var q = $("find").value.trim();
-    if (q) return renderFind(q);
-    var visible = order.filter(function (a) { return lang === "all" || a.lang === lang; });
-    var keep = visible.some(function (a) { return a.id === current; });
-    renderAuthor(keep ? current : (visible[0] && visible[0].id));
-    if (!visible.length) { renderAuthors(null); $("works").innerHTML = '<p class="empty">Nothing here yet.</p>'; }
+    setShelf(b.getAttribute("data-l"));
+    $("find").value = "";
+    renderAuthor(firstOn(lang));
   });
 
   function refreshView() {
+    renderShelves();
     var q = $("find").value.trim();
     if (q) return renderFind(q);
-    var visible = order.filter(function (a) { return lang === "all" || a.lang === lang; });
-    var keep = visible.some(function (a) { return a.id === current; });
-    if (visible.length) renderAuthor(keep ? current : visible[0].id);
+    var keep = authors[current] && authors[current].lang === lang;
+    var id = keep ? current : firstOn(lang);
+    if (id) renderAuthor(id);
   }
   window.LibraryPage = {
     setLocal: function (list) {
@@ -182,6 +206,9 @@
     $("works").innerHTML = '<p class="empty">The library is empty.</p>';
     return;
   }
+  lang = load("lib-lang");
+  renderShelves();
   var start = location.hash.slice(1);
-  renderAuthor(authors[start] ? start : (authors[load("lib-author")] ? load("lib-author") : order[0].id));
+  renderAuthor(authors[start] ? start : (authors[load("lib-author")] && authors[load("lib-author")].lang === lang
+    ? load("lib-author") : firstOn(lang)));
 })();

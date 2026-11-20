@@ -3,7 +3,7 @@
 (function () {
   var KEY = "reader-settings";
   var DEFAULTS = {
-    theme: "auto", accent: "red", grc: "Gentium Book Plus", lat: "Gentium Book Plus", eng: "Spectral",
+    theme: "auto", accent: "red", grc: "Gentium Book Plus", lat: "Gentium Book Plus", cyr: "Gentium Book Plus", eng: "Spectral",
     size: 17, oscale: 110, lh: 1.6, width: "medium",
     cols: "both", align: "speech", ln: "5", mk: "on", fn: "on", toc: "on", justify: "off",
     dict: "on", abbr: "expand", wk: "on", wkety: "timeline", wkipa: "on", wkaudio: "on", wkex: 1, wklangs: "en"
@@ -11,6 +11,7 @@
   var FONTS = {
     grc: ["Gentium Book Plus", "EB Garamond", "Cardo", "GFS Didot", "GFS Neohellenic", "Palatino Linotype", "Times New Roman"],
     lat: ["Gentium Book Plus", "Spectral", "EB Garamond", "Cardo", "Georgia", "Palatino Linotype"],
+    cyr: ["Gentium Book Plus", "EB Garamond", "Spectral", "Georgia", "Palatino Linotype", "Times New Roman"],
     eng: ["Spectral", "EB Garamond", "Cardo", "Gentium Book Plus", "Georgia", "Palatino Linotype", "system-ui"]
   };
   // Accent colours as [accent, highlight] per scheme. Red is the stylesheet's own default.
@@ -46,6 +47,7 @@
     else { s.removeProperty("--accent"); s.removeProperty("--hl"); }
     s.setProperty("--font-grc", fam(p.grc));
     s.setProperty("--font-lat", fam(p.lat));
+    s.setProperty("--font-cyr", fam(p.cyr));
     s.setProperty("--font-eng", fam(p.eng));
     s.setProperty("--fs", p.size + "px");
     s.setProperty("--oscale", String(p.oscale / 100));
@@ -147,14 +149,16 @@
     var preview = el("div", { "class": "preview" },
       '<span class="pg" lang="grc">μῆνιν ἄειδε θεὰ Πηληϊάδεω Ἀχιλῆος</span>' +
       '<span class="pl" lang="la">Arma virumque cano, Troiae qui primus ab oris</span>' +
+      '<span class="pc" lang="ru">Была тёмная, осенняя ночь</span>' +
       '<span class="pe">Sing, goddess, the wrath of Achilles, son of Peleus</span>');
     body.appendChild(group("Type", [
       row("Greek font", select("grc", FONTS.grc), "set-grc"),
-      row("Latin font", select("lat", FONTS.lat), "set-lat"),
+      row("Roman font (Latin, French, Italian…)", select("lat", FONTS.lat), "set-lat"),
+      row("Cyrillic font", select("cyr", FONTS.cyr), "set-cyr"),
       row("English font", select("eng", FONTS.eng), "set-eng"),
       preview,
       row("Text size", range("size", 14, 24, 1, function (n) { return n + " px"; }), "set-size"),
-      row("Greek & Latin size", range("oscale", 90, 140, 5, function (n) { return n + "% of the English"; }), "set-oscale"),
+      row("Original-language size", range("oscale", 90, 140, 5, function (n) { return n + "% of the English"; }), "set-oscale"),
       row("Line spacing", range("lh", 1.3, 2.1, 0.05, function (n) { return n.toFixed(2); }), "set-lh"),
       row("Justify prose", chips("justify", [["off", "Off"], ["on", "On"]]))
     ]));
@@ -170,13 +174,13 @@
       row("Double-click a word", chips("dict", [["on", "Look it up"], ["off", "Do nothing"]])),
       row("Citations", chips("abbr", [["expand", "Author and title"], ["short", "LSJ abbreviations"]]))
     ]));
-    body.appendChild(group("English words (Wiktionary)", [
-      row("Double-click an English word", chips("wk", [["on", "Look it up"], ["off", "Do nothing"]])),
+    body.appendChild(group("Modern languages (Wiktionary)", [
+      row("Double-click an English, Russian, Chinese… word", chips("wk", [["on", "Look it up"], ["off", "Do nothing"]])),
       row("Etymology", chips("wkety", [["timeline", "Timeline"], ["prose", "As written"], ["off", "Hide"]])),
       row("Pronunciation", chips("wkipa", [["on", "IPA"], ["off", "Hide"]])),
       row("Recordings", chips("wkaudio", [["on", "Show"], ["off", "Hide"]])),
       row("Examples per sense", chips("wkex", [[0, "None"], [1, "One"], [2, "Two"]])),
-      row("Languages", chips("wklangs", [["en", "English only"], ["all", "All languages"]]))
+      row("Languages", chips("wklangs", [["en", "The text's language"], ["all", "All languages"]]))
     ]));
     var reset = el("button", { type: "button", "class": "icon-btn reset" }, "Reset all settings");
     reset.addEventListener("click", function () {
