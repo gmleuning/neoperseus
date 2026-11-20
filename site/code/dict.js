@@ -1,4 +1,4 @@
-// Dictionary side panel. Click a Greek or Latin word: the panel lists the dictionary words it
+// Dictionary side panel. Double-click a Greek or Latin word: the panel lists the dictionary words it
 // can come from (with the parse, for Greek), and shows the full LSJ or Lewis & Short entry.
 // Data is in dict/ (built by: python perseus.py dictionaries), loaded a few letters at a time.
 (function () {
@@ -480,7 +480,7 @@
     return false;
   }
 
-  // ---- clicking a word in the text -----------------------------------------------------------
+  // ---- double-clicking a word in the text ----------------------------------------------------
   var WORDCH = /[\p{L}\p{M}’'ʼ]/u;
   function unmark() {
     if (marked && marked.parentNode) {
@@ -501,15 +501,13 @@
     }
     return null;
   }
-  document.addEventListener("click", function (e) {
+  document.addEventListener("dblclick", function (e) {
     var col = e.target.closest && e.target.closest(".col");
     if (!col) return;
     var lang = col.getAttribute("lang");
     if (lang === "en") { if (S && S.get("wk") === "off") return; }
     else if ((S && S.get("dict") !== "on") || !col.classList.contains("g") || (lang !== "grc" && lang !== "la")) return;
     if (e.target.closest("a, sup, .ln, .mk, .spk, .stage, .notes, button, summary")) return;
-    var sel = window.getSelection();
-    if (sel && !sel.isCollapsed) return;           // the reader is selecting text, not looking up
     var c = caretAt(e.clientX, e.clientY);
     if (!c || c.node.nodeType !== 3) return;
     var text = c.node.nodeValue, a = c.offset, b = c.offset;

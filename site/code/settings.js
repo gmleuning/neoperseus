@@ -167,11 +167,11 @@
       row("Contents sidebar", chips("toc", [["on", "Show"], ["off", "Hide"]]))
     ]));
     body.appendChild(group("Dictionary", [
-      row("Click a word", chips("dict", [["on", "Look it up"], ["off", "Do nothing"]])),
+      row("Double-click a word", chips("dict", [["on", "Look it up"], ["off", "Do nothing"]])),
       row("Citations", chips("abbr", [["expand", "Author and title"], ["short", "LSJ abbreviations"]]))
     ]));
     body.appendChild(group("English words (Wiktionary)", [
-      row("Click an English word", chips("wk", [["on", "Look it up"], ["off", "Do nothing"]])),
+      row("Double-click an English word", chips("wk", [["on", "Look it up"], ["off", "Do nothing"]])),
       row("Etymology", chips("wkety", [["timeline", "Timeline"], ["prose", "As written"], ["off", "Hide"]])),
       row("Pronunciation", chips("wkipa", [["on", "IPA"], ["off", "Hide"]])),
       row("Recordings", chips("wkaudio", [["on", "Show"], ["off", "Hide"]])),
