@@ -39,6 +39,7 @@ neoperseus/
       shelf.txt          your Perseus reading list
       SPEC.md            the file format
       TEXTS.md           formatting, pairing and finishing texts by hand
+      format_and_revis.md  the format and error categories as an LLM prompt, to check and fix texts
       inbox/             raw files waiting to be imported (not committed)
       unsorted/          files not yet sorted (not committed)
       sources/           downloaded Perseus XML, dictionary sources     (generated)
