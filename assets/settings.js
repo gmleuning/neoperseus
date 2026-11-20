@@ -6,7 +6,7 @@
     theme: "auto", accent: "red", grc: "Gentium Book Plus", lat: "Gentium Book Plus", eng: "Spectral",
     size: 17, oscale: 110, lh: 1.6, width: "medium",
     cols: "both", align: "speech", ln: "5", mk: "on", fn: "on", toc: "on", justify: "off",
-    dict: "on", abbr: "expand"
+    dict: "on", abbr: "expand", wk: "on", wkety: "timeline", wkipa: "on", wkaudio: "on", wkex: 1, wklangs: "en"
   };
   var FONTS = {
     grc: ["Gentium Book Plus", "EB Garamond", "Cardo", "GFS Didot", "GFS Neohellenic", "Palatino Linotype", "Times New Roman"],
@@ -169,6 +169,14 @@
     body.appendChild(group("Dictionary", [
       row("Click a word", chips("dict", [["on", "Look it up"], ["off", "Do nothing"]])),
       row("Citations", chips("abbr", [["expand", "Author and title"], ["short", "LSJ abbreviations"]]))
+    ]));
+    body.appendChild(group("English words (Wiktionary)", [
+      row("Click an English word", chips("wk", [["on", "Look it up"], ["off", "Do nothing"]])),
+      row("Etymology", chips("wkety", [["timeline", "Timeline"], ["prose", "As written"], ["off", "Hide"]])),
+      row("Pronunciation", chips("wkipa", [["on", "IPA"], ["off", "Hide"]])),
+      row("Recordings", chips("wkaudio", [["on", "Show"], ["off", "Hide"]])),
+      row("Examples per sense", chips("wkex", [[0, "None"], [1, "One"], [2, "Two"]])),
+      row("Languages", chips("wklangs", [["en", "English only"], ["all", "All languages"]]))
     ]));
     var reset = el("button", { type: "button", "class": "icon-btn reset" }, "Reset all settings");
     reset.addEventListener("click", function () {

@@ -204,6 +204,7 @@
       if (v) lookup(v, /[Ͱ-Ͽἀ-῿]/.test(v) ? "grc" : "la");
     });
     panel.addEventListener("click", function (e) {
+      if (wkClick(e)) return;
       var b = e.target.closest("button.cand");
       if (b && current) { showEntry(+b.getAttribute("data-i")); }
     });
@@ -300,6 +301,185 @@
     });
   }
 
+
+  // ---- English words: Wiktionary, consulted live (its public REST API) ---------------------
+  // Same panel as the dictionaries. Definitions and examples come from /page/definition; IPA,
+  // recordings and the etymology (drawn as a timeline) from /page/html. Settings: "English words".
+  var WK = "https://en.wiktionary.org/api/rest_v1/page/";
+  var OK_TAGS = { A: 1, I: 1, B: 1, EM: 1, STRONG: 1, SPAN: 1, SUP: 1, SUB: 1, SMALL: 1, ABBR: 1 };
+  var DROP_TAGS = { STYLE: 1, SCRIPT: 1, LINK: 1, IMG: 1, UL: 1, OL: 1, DL: 1, TABLE: 1, FIGURE: 1, AUDIO: 1 };
+  var wkSeq = 0, player = null, MAX_DEFS = 6;
+  function opt(k, d) { var v = S && S.get(k); return v == null ? d : v; }
+  function wkClean(html) {
+    var t = document.createElement("template");
+    t.innerHTML = html || "";
+    var all = Array.prototype.slice.call(t.content.querySelectorAll("*"));
+    all.forEach(function (el) {
+      if (!t.content.contains(el)) return;                 // removed along with an ancestor
+      if (DROP_TAGS[el.tagName] || el.matches("sup.reference,.mw-ref")) { el.remove(); return; }
+      if (!OK_TAGS[el.tagName]) { el.replaceWith.apply(el, Array.prototype.slice.call(el.childNodes)); return; }
+      var href = el.getAttribute("href") || "";
+      Array.prototype.slice.call(el.attributes).forEach(function (a) { el.removeAttribute(a.name); });
+      if (el.tagName === "A") {
+        var m = href.match(/^(?:\.\/|\/wiki\/)([^#?]+)/);
+        if (m && !/^[A-Za-z]+:/.test(decodeURIComponent(m[1]))) {
+          el.setAttribute("href", "#"); el.setAttribute("data-w", decodeURIComponent(m[1]).replace(/_/g, " "));
+        } else el.replaceWith.apply(el, Array.prototype.slice.call(el.childNodes));
+      }
+    });
+    return t.innerHTML.trim();
+  }
+  // "Inherited from Middle English dogge, from Old English docga ..." -> [{lang, forms, gloss}, ...]
+  function etyChain(p) {
+    var steps = [], cur = { lang: "", forms: [], gloss: [] }, depth = 0, done = false;
+    function push() { if (cur.lang || cur.forms.length) steps.push(cur); cur = { lang: "", forms: [], gloss: [] }; }
+    (function walk(n) {
+      var kids = n.childNodes;
+      for (var i = 0; i < kids.length; i++) {
+        var c = kids[i];
+        if (done) return;
+        if (c.nodeType === 3) {
+          c.nodeValue.split(/(\(|\)|\bfrom\b|\.(?=\s|$))/).forEach(function (part) {
+            if (done) return;
+            if (part === "(") depth++;
+            else if (part === ")") depth = Math.max(0, depth - 1);
+            else if (depth === 0 && part === "from") push();
+            else if (depth === 0 && part === ".") done = true;
+          });
+          continue;
+        }
+        if (c.nodeType !== 1 || depth > 0 || c.matches("sup,.reference,.mw-ref,link,style")) continue;
+        if (c.matches(".etyl")) { if (!cur.lang) cur.lang = c.textContent.trim(); continue; }
+        if (c.matches(".mention-gloss")) { cur.gloss.push(c.textContent.trim()); continue; }
+        if (c.matches(".mention-gloss-paren,.mention-gloss-double-quote,.mention-gloss-separator,.annotation-paren")) continue;
+        if (c.matches(".mention-tr,.tr")) { cur.forms.push("(" + c.textContent.trim() + ")"); continue; }
+        if (c.matches(".mention,i,b")) { var tx = c.textContent.trim(); if (tx) cur.forms.push(tx); continue; }
+        walk(c);
+      }
+    })(p);
+    push();
+    return steps;
+  }
+  function etyHTML(sec) {
+    var mode = opt("wkety", "timeline");
+    if (mode === "off" || !sec) return "";
+    var out = "";
+    var etys = Array.prototype.slice.call(sec.querySelectorAll("section")).filter(function (s) {
+      return /^Etymology/.test((s.firstElementChild && s.firstElementChild.textContent) || "");
+    }).slice(0, 2);
+    etys.forEach(function (es, i) {
+      var p = es.querySelector(":scope > p");
+      if (!p || !p.textContent.trim()) return;
+      var prose = wkClean(p.innerHTML);
+      out += '<div class="etyh">' + (etys.length > 1 ? "Etymology " + (i + 1) : "Etymology") + "</div>";
+      var ch = mode === "timeline" ? etyChain(p) : [];
+      if (ch.some(function (s) { return s.lang; })) {
+        out += '<ol class="ety">' + ch.map(function (s) {
+          return "<li>" + (s.lang ? '<span class="el">' + esc(s.lang) + "</span> " : "") + "<i>" + esc(s.forms.join(" ")) + "</i>" +
+            (s.gloss.length ? ' <span class="eg">“' + esc(s.gloss.join("; ")) + "”</span>" : "") + "</li>";
+        }).join("") + '</ol><details class="etyp"><summary>as written</summary>' + prose + "</details>";
+      } else out += '<div class="etyp">' + prose + "</div>";
+    });
+    return out;
+  }
+  function pronHTML(sec) {
+    if (!sec) return "";
+    var parts = [];
+    if (opt("wkipa", "on") === "on") {
+      var seen = {};
+      Array.prototype.slice.call(sec.querySelectorAll(".IPA")).map(function (x) { return x.textContent.trim(); })
+        .filter(function (x) { return /^[\/\[]/.test(x) && !seen[x] && (seen[x] = 1); }).slice(0, 3)
+        .forEach(function (x) { parts.push('<span class="ipa">' + esc(x) + "</span>"); });
+    }
+    if (opt("wkaudio", "on") === "on") {
+      var lab = {};
+      Array.prototype.slice.call(sec.querySelectorAll("audio")).slice(0, 4).forEach(function (a) {
+        var srcs = Array.prototype.slice.call(a.querySelectorAll("source")).map(function (s) { return s.getAttribute("src") || ""; });
+        var src = srcs.filter(function (s) { return /\.mp3$/.test(s); })[0] || srcs[0] || a.getAttribute("src");
+        if (!src) return;
+        if (src.indexOf("//") === 0) src = "https:" + src;
+        var r = decodeURIComponent((a.getAttribute("resource") || "").replace(/^\.\/File:/, ""));
+        var m = r.match(/^[A-Za-z]{2,3}-([a-z]{2,3})(?:-[a-z]+)?-/);
+        var l = m ? m[1].toUpperCase() : (/^LL-/.test(r) ? "voice" : "audio");
+        lab[l] = (lab[l] || 0) + 1; if (lab[l] > 1) l += " " + lab[l];
+        parts.push('<button class="play" type="button" data-src="' + esc(src) + '" title="' + esc(r) + '">' + esc(l) + "</button>");
+      });
+    }
+    return parts.length ? '<div class="pron">' + parts.join("") + "</div>" : "";
+  }
+  function getJSON(u) { return fetch(u, { headers: { Accept: "application/json" } }).then(function (r) { return r.ok ? r.json() : null; }); }
+  function getHTML(u) {
+    return fetch(u).then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (t) { return t ? new DOMParser().parseFromString(t, "text/html") : null; }, function () { return null; });
+  }
+  function defsHTML(list) {
+    var ex = parseInt(opt("wkex", 1), 10) || 0;
+    var items = list.map(function (d) {
+      return "<li>" + wkClean(d.definition) + (d.examples || []).slice(0, ex).map(function (x) { return '<div class="ex">' + wkClean(x) + "</div>"; }).join("") + "</li>";
+    });
+    if (items.length <= MAX_DEFS) return '<ol class="defs">' + items.join("") + "</ol>";
+    return '<ol class="defs">' + items.slice(0, MAX_DEFS).join("") + '</ol><details class="more"><summary>' +
+      (items.length - MAX_DEFS) + ' more senses</summary><ol class="defs" start="' + (MAX_DEFS + 1) + '">' + items.slice(MAX_DEFS).join("") + "</ol></details>";
+  }
+  function wiki(word) {
+    word = word.trim();
+    if (!word) return;
+    var seq = ++wkSeq;
+    open();
+    var out = panel.querySelector("#dict-out");
+    panel.querySelector("#dict-title").innerHTML = '<span lang="en">' + esc(word) + "</span>";
+    out.innerHTML = '<p class="note">Looking up Wiktionary…</p>';
+    var wantPage = opt("wkety", "timeline") !== "off" || opt("wkipa", "on") === "on" || opt("wkaudio", "on") === "on";
+    var t = function (w) { return encodeURIComponent(w.replace(/ /g, "_")); };
+    var used = word;
+    function fetchBoth(w) {
+      return Promise.all([getJSON(WK + "definition/" + t(w) + "?redirect=true"), wantPage ? getHTML(WK + "html/" + t(w)) : null]);
+    }
+    fetchBoth(word).then(function (r) {
+      if (!r[0] && word !== word.toLowerCase()) { used = word.toLowerCase(); return fetchBoth(used); }
+      return r;
+    }).then(function (r) {
+      if (seq !== wkSeq) return;
+      var data = r[0], doc = r[1];
+      var page = "https://en.wiktionary.org/wiki/" + t(used);
+      var foot = '<p class="wkf"><a href="' + page + '" target="_blank" rel="noopener">Open on Wiktionary ↗</a></p>';
+      if (!data) { out.innerHTML = '<p class="note">No Wiktionary entry for “' + esc(word) + "”.</p>" + foot; return; }
+      panel.querySelector("#dict-title").innerHTML = '<span lang="en">' + esc(used) + "</span>";
+      var langs = opt("wklangs", "en");
+      var codes = Object.keys(data).filter(function (c) { return langs === "all" || c === "en"; });
+      codes.sort(function (a, b) { return (b === "en") - (a === "en") || (data[a][0].language || a).localeCompare(data[b][0].language || b); });
+      var html = "";
+      codes.forEach(function (c) {
+        var name = data[c][0].language || c;
+        var node = doc && doc.getElementById(name.replace(/ /g, "_"));
+        var sec = node && node.closest("section");
+        var inner = pronHTML(sec) + etyHTML(sec);
+        data[c].forEach(function (p) {
+          var defs = (p.definitions || []).filter(function (d) { return wkClean(d.definition); });
+          if (!defs.length) return;
+          inner += '<div class="wkp">' + esc(p.partOfSpeech || "") + "</div>" + defsHTML(defs);
+        });
+        if (inner) html += '<details class="wkl"' + (c === "en" || codes.length === 1 ? " open" : "") + "><summary>" + esc(name) + "</summary>" + inner + "</details>";
+      });
+      out.innerHTML = (html || '<p class="note">No English definitions found.</p>') + foot;
+      panel.querySelector(".body").scrollTop = 0;
+    }).catch(function () { if (seq === wkSeq) out.innerHTML = '<p class="note">Wiktionary could not be reached.</p>'; });
+  }
+  function wkClick(e) {
+    var pl = e.target.closest(".play");
+    if (pl) {
+      if (player) player.pause();
+      Array.prototype.forEach.call(panel.querySelectorAll(".play.on"), function (b) { b.classList.remove("on"); });
+      player = new Audio(pl.getAttribute("data-src")); pl.classList.add("on");
+      player.onended = function () { pl.classList.remove("on"); };
+      player.play().catch(function () { pl.classList.remove("on"); });
+      return true;
+    }
+    var a = e.target.closest("a[data-w]");
+    if (a) { e.preventDefault(); wiki(a.getAttribute("data-w")); return true; }
+    return false;
+  }
+
   // ---- clicking a word in the text -----------------------------------------------------------
   var WORDCH = /[\p{L}\p{M}’'ʼ]/u;
   function unmark() {
@@ -322,11 +502,11 @@
     return null;
   }
   document.addEventListener("click", function (e) {
-    if (S && S.get("dict") !== "on") return;
-    var col = e.target.closest && e.target.closest(".col.g");
+    var col = e.target.closest && e.target.closest(".col");
     if (!col) return;
     var lang = col.getAttribute("lang");
-    if (lang !== "grc" && lang !== "la") return;
+    if (lang === "en") { if (S && S.get("wk") === "off") return; }
+    else if ((S && S.get("dict") !== "on") || !col.classList.contains("g") || (lang !== "grc" && lang !== "la")) return;
     if (e.target.closest("a, sup, .ln, .mk, .spk, .stage, .notes, button, summary")) return;
     var sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;           // the reader is selecting text, not looking up
@@ -343,7 +523,8 @@
     marked = document.createElement("span");
     marked.className = "dict-word";
     try { range.surroundContents(marked); } catch (err) { marked = null; }
-    lookup(word.replace(/[’'ʼ]+$/, "") || word, lang);
+    word = word.replace(/[’'ʼ]+$/, "") || word;
+    if (lang === "en") wiki(word); else lookup(word, lang);
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
 })();

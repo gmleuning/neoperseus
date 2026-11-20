@@ -4,7 +4,8 @@
     python perseus.py remove tlg0006.tlg012   take it off the shelf (its downloaded and converted files are deleted)
     python perseus.py update                  fetch anything missing, convert, and rebuild the site
     python perseus.py build                   rebuild the site only (after editing your own texts)
-    python perseus.py build --private         ... with library/private too (for reading here; not deployable)
+    python perseus.py build --public          ... only site/, the public version that is deployed
+                                              (a plain build also makes site-local/: catalog, private texts)
     python perseus.py edit                    edit texts in the browser (this computer only), then Publish
     python perseus.py publish                 rebuild, commit library/edits.tsv, push, deploy
     python perseus.py find euripides          search the catalog from the command line
@@ -22,7 +23,8 @@ from reader import build as builder
 from reader import perseus
 
 ROOT = Path(__file__).resolve().parent
-SITE = ROOT / "site"
+SITE = ROOT / "site"                  # the public site: what is deployed
+SITE_LOCAL = ROOT / "site-local"      # this computer only: catalog, private texts (served over SITE by edit mode)
 LIBRARY = ROOT / "library"
 
 
@@ -40,19 +42,23 @@ def cmd_update(args, force=False):
 
 def cmd_build(args, catalog=None):
     catalog = catalog or perseus.load_catalog()
-    private = getattr(args, "private", False)
-    entries, report = builder.build(LIBRARY, SITE, catalog, include_private=private)
+    public = getattr(args, "public", False)
+    stats = {}
+    entries, report = builder.build(LIBRARY, SITE, catalog, public=public,
+                                    local_site=None if public else SITE_LOCAL, stats=stats)
     flagged = [r for r in report if r[5] and r[3] / r[5] < 0.9 and not r[6]]
     approx = [r for r in report if r[6]]
-    print(f"built {len(entries)} work(s) into {SITE}")
+    print(f"built {len(entries)} work(s) into {SITE}" + ("" if public else f" and {SITE_LOCAL}") +
+          f": {stats.get('made', 0)} made, {stats.get('cached', 0)} unchanged" +
+          (f", {stats['removed']} removed" if stats.get("removed") else ""))
     for tid, action, anchor in (builder.EDITS.unmatched() if builder.EDITS else []):
         print(f"  edit not applied (text changed?): {tid} {action} \"{anchor[:50]}…\"")
     if approx:
         print(f"  {len(approx)} verse translation(s) have their own line numbers and are placed approximately"
-              " (see site/_sync.md)")
+              " (see site-local/_sync.md)")
     for wid, o, t, shared, cand, tk, _ in flagged:
         print(f"  check sync: {o} / {t}: {shared} of {tk} translation numbers matched")
-    print(f"open {SITE / 'index.html'}")
+    print(f"open {SITE / 'index.html'}  (the catalog and private texts: python perseus.py edit)")
     print("to edit or import texts: python perseus.py edit  (then http://127.0.0.1:8790/)")
 
 
@@ -88,8 +94,6 @@ def cmd_remove(args):
             if p.exists():
                 p.unlink()
         print(f"  - {w['id']}")
-    if SITE.exists():
-        shutil.rmtree(SITE)
     cmd_build(args, catalog)
 
 
@@ -148,7 +152,9 @@ def main():
     p = sub.add_parser("update"); p.add_argument("--force", action="store_true",
                                                  help="reconvert everything"); p.set_defaults(fn=cmd_update)
     p = sub.add_parser("build"); p.add_argument("--private", action="store_true",
-                                                help="include library/private (this computer only; cannot be deployed)")
+                                                help="(accepted for old habits: private texts are always in the local site)")
+    p.add_argument("--public", action="store_true",
+                   help="only site/, the public build that is deployed (no local site)")
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("dictionaries"); p.set_defaults(fn=cmd_dictionaries)
     p = sub.add_parser("edit"); p.add_argument("--port", type=int, default=8790)

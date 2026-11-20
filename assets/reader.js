@@ -173,6 +173,54 @@
     });
   }
 
+
+  // ---- phones: the title opens a dropdown (go to, contents), blocks/lines live in Settings -------
+  (function () {
+    var bar = document.querySelector(".bar"), title = bar && bar.querySelector(".title");
+    if (!title || !window.matchMedia) return;
+    var mq = window.matchMedia("(max-width: 720px)");
+    var toc = document.querySelector(".toc ol"), tools = bar.querySelector(".tools");
+    var jump = bar.querySelector(".jump"), apptog = bar.querySelector("#apptog");
+    var drop = document.createElement("div");
+    drop.className = "navdrop";
+    drop.hidden = true;
+    drop.innerHTML = '<div class="nd-tools"></div>' + (toc ? '<ol class="nd-toc"></ol>' : "");
+    if (toc) drop.querySelector(".nd-toc").innerHTML = toc.innerHTML;
+    document.body.appendChild(drop);
+    document.documentElement.classList.add("has-navdrop");
+    title.setAttribute("role", "button");
+    title.setAttribute("tabindex", "0");
+    title.setAttribute("aria-expanded", "false");
+    title.classList.add("has-drop");
+
+    function arrange() {                     // go-to and apparatus sit in the dropdown on a phone
+      var box = drop.querySelector(".nd-tools");
+      if (mq.matches) { if (apptog) box.appendChild(apptog); if (jump) box.appendChild(jump); }
+      else {
+        var anchor = tools && tools.querySelector("a.search");
+        if (tools && apptog) tools.insertBefore(apptog, anchor);
+        if (tools && jump) tools.insertBefore(jump, anchor);
+        shut();
+      }
+    }
+    function open() {
+      drop.hidden = false;
+      title.setAttribute("aria-expanded", "true");
+      var cur = drop.querySelector("a.cur");
+      if (cur) cur.scrollIntoView({ block: "center" });
+    }
+    function shut() { drop.hidden = true; title.setAttribute("aria-expanded", "false"); }
+    function toggle() { if (!mq.matches) return; if (drop.hidden) open(); else shut(); }
+    title.addEventListener("click", toggle);
+    title.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    drop.addEventListener("click", function (e) { if (e.target.closest("a")) shut(); });
+    drop.addEventListener("submit", shut);
+    document.addEventListener("click", function (e) { if (!drop.hidden && !drop.contains(e.target) && !title.contains(e.target)) shut(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") shut(); });
+    if (mq.addEventListener) mq.addEventListener("change", arrange); else mq.addListener(arrange);
+    arrange();
+  })();
+
   // keys: t = toggle alignment, a = apparatus, / = jump box
   document.addEventListener("keydown", function (e) {
     var tag = e.target.tagName;

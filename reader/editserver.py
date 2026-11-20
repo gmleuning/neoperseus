@@ -17,6 +17,7 @@ from . import sources
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
+SITE_LOCAL = ROOT / "site-local"
 RULES = ROOT / "library" / "edits.tsv"
 INBOX = ROOT / "library" / "additions"          # raw files waiting to be imported
 DEST = {"private": ROOT / "library" / "private", "own": ROOT / "library" / "own"}
@@ -173,9 +174,43 @@ JOB = Job()
 PY = os.environ.get("PYTHON", "python")
 
 
-def build_steps(private=True):
-    """Here the site is built with library/private; Publish builds without it."""
-    return [("build", [PY, "perseus.py", "build"] + (["--private"] if private else []), False)]
+def build_steps():
+    """Both sites: site/ (public) and site-local/ (catalog and private texts). Only changed works are rebuilt."""
+    return [("build", [PY, "perseus.py", "build"], False)]
+
+
+def add_steps(source, wid, translation=""):
+    """The catalog's Add button: put the work on the shelf (Perseus) or download the Wikisource page(s),
+    then rebuild this computer's site."""
+    from . import perseus as perseus_mod
+
+    def add_perseus():
+        works, missing = perseus_mod.shelf_works(catalog(), [wid])
+        if missing:
+            raise ValueError(f"not in the catalog: {wid}")
+        lines = perseus_mod.SHELF.read_text(encoding="utf-8").splitlines() if perseus_mod.SHELF.exists() else []
+        if wid not in {l.split("#", 1)[0].strip() for l in lines}:
+            lines.append(wid)
+            perseus_mod.SHELF.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return f"{wid} added to shelf.txt"
+
+    def add_wikisource():
+        from . import wikisource_fetch
+        say = JOB.log.append                       # progress lines show up in the catalog's status bar
+        if translation:
+            paths = wikisource_fetch.add_translation(wid, translation, log=say)
+        else:
+            paths = wikisource_fetch.add(wid, log=say)
+        return "wrote " + ", ".join(str(p.relative_to(ROOT)).replace("\\", "/") for p in paths)
+
+    if source == "perseus":
+        works, missing = perseus_mod.shelf_works(catalog(), [wid])
+        if missing:
+            raise ValueError(f"not in the catalog: {wid}")
+        return [("add to shelf", add_perseus, False), ("fetch and convert", [PY, "perseus.py", "update"], False)]
+    if source == "wikisource":
+        return [("download from Wikisource", add_wikisource, False)] + build_steps()
+    raise ValueError("unknown source")
 
 
 def publish_steps():
@@ -191,10 +226,10 @@ def publish_steps():
         return "committed library/edits.tsv"
     shell = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "deploy.ps1"] \
         if os.name == "nt" else ["pwsh", "-File", "deploy.ps1"]
-    return build_steps(private=False) + [("commit", commit, False),
-                                         ("git push", ["git", "push"], False),
-                                         ("deploy to Cloudflare Pages", shell, False)] + \
-        [("rebuild with private texts for this computer", s[1], True) for s in build_steps()]
+    # deploy.ps1 uploads site/, which the build above has just brought up to date (no private texts in it)
+    return build_steps() + [("commit", commit, False),
+                            ("git push", ["git", "push"], False),
+                            ("deploy to Cloudflare Pages", shell, False)]
 
 
 def publish_cli():
@@ -208,6 +243,19 @@ def publish_cli():
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+    def translate_path(self, path):
+        """site-local/ first (catalog, private texts, the library and search pages that list them), then site/."""
+        p = Path(super().translate_path(path))
+        try:
+            local = SITE_LOCAL / p.relative_to(SITE)
+        except ValueError:
+            return str(p)
+        if local.is_file():
+            return str(local)
+        if local.is_dir() and (local / "index.html").is_file():
+            return str(local)
+        return str(p)
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
@@ -298,6 +346,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(do_import(b, preview=path.endswith("preview")))
             except (ValueError, KeyError, RuntimeError, OSError) as e:
                 return self.send_json({"error": str(e)}, 400)
+        if path == "/__edit/catalog-add":
+            try:
+                steps = add_steps(b.get("source", ""), b.get("id", ""), b.get("translation", ""))
+            except ValueError as e:
+                return self.send_json({"error": str(e)}, 400)
+            return self.send_json({"started": JOB.start("Add " + b.get("id", ""), steps)})
         if path == "/__edit/build":
             return self.send_json({"started": JOB.start("Rebuild", build_steps())})
         if path == "/__edit/publish":
@@ -306,6 +360,9 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def serve(port=8790, open_browser=True):
+    if not (SITE_LOCAL / "library.html").exists():
+        print("building the local site (catalog and private texts)...")
+        subprocess.run([PY, "perseus.py", "build"], cwd=ROOT, check=True)
     handler = partial(Handler, directory=str(SITE))
     httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)      # this computer only
     url = f"http://127.0.0.1:{port}/library.html"

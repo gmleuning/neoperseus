@@ -34,11 +34,12 @@ function Run([string]$exe, [string[]]$argv) {
 }
 
 # 1. build
-if ($Update)    { Run python @('perseus.py', 'update') }
-elseif ($Build) { Run python @('perseus.py', 'build') }
+if ($Update)    { Run python @('perseus.py', 'update'); Run python @('perseus.py', 'build', '--public') }
+elseif ($Build) { Run python @('perseus.py', 'build', '--public') }
 
 # 2. check site/ against Cloudflare Pages' free-plan limits
 if (-not (Test-Path 'site/index.html')) { throw 'site/index.html not found. Build first: .\deploy.ps1 -Build' }
+if (Test-Path 'site/_local') { throw 'site/ was built for this computer (it has the catalog page). Rebuild the public version: .\deploy.ps1 -Build' }
 if (Test-Path 'site/_private') { throw 'site/ was built with library/private (texts that must not be published). Rebuild without it: .\deploy.ps1 -Build' }
 if (-not (Test-Path 'site/dict/READY')) {
     Write-Warning 'Dictionaries are missing (site/dict/READY). The dictionary panel will be empty. Run: python perseus.py dictionaries'

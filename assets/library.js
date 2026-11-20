@@ -133,7 +133,7 @@
     $("works").innerHTML = hits.length
       ? "<h2>" + hits.length + " match" + (hits.length === 1 ? "" : "es") + "</h2><ul>" +
         hits.slice(0, 200).map(function (w) { return workItem(w, true); }).join("") + "</ul>"
-      : '<p class="empty">Nothing on the shelf matches. The <a href="catalog.html">catalog</a> lists every Perseus text.</p>';
+      : '<p class="empty">Nothing in the library matches.</p>';
   }
 
   $("authors").addEventListener("click", function (e) {
@@ -179,8 +179,7 @@
   };
 
   if (!order.length) {
-    $("works").innerHTML = '<p class="empty">The shelf is empty. Add a text with <code>python perseus.py add ID</code>; ' +
-      'the <a href="catalog.html">catalog</a> shows the ids.</p>';
+    $("works").innerHTML = '<p class="empty">The library is empty.</p>';
     return;
   }
   var start = location.hash.slice(1);

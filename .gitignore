@@ -1,12 +1,14 @@
 # generated: rebuild with python perseus.py update
 corpus/
 site/
+site-local/
+.buildcache/
 library/perseus/
 __pycache__/
 *.pyc
 # wrangler (Cloudflare deploy) cache
 .wrangler/
-# texts that may not be published (python perseus.py build --private reads them)
+# texts that may not be published (read only into site-local/ by python perseus.py build)
 library/private/
 # imported books and working copies (in copyright or not yet sorted): never commit
 library/additions/

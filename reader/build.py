@@ -1,6 +1,7 @@
 """Build the static site from the library: one page per original/translation pairing,
 an index of the shelf, a catalog page, and a sync report."""
 import bisect
+import hashlib
 import html
 import json
 import re
@@ -15,8 +16,20 @@ from . import library
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 ORIGINAL = {"grc", "lat"}
-LANG_NAMES = {"grc": "Greek", "lat": "Latin", "eng": "English"}
+LANG_NAMES = {"grc": "Greek", "lat": "Latin", "eng": "English", "it": "Italian", "fr": "French", "de": "German",
+              "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "el": "Greek"}
 HTML_LANG = {"grc": "grc", "lat": "la", "eng": "en"}
+
+
+def html_lang(code):
+    return HTML_LANG.get(code, code or "en")
+
+
+def is_original(meta):
+    """Greek and Latin texts are originals. So is any other language that is not English and not marked
+    as a translation (`original: it` in the front matter): Wikisource pairs such as Dante and Italian."""
+    lang = meta.get("language")
+    return lang in ORIGINAL or (lang not in (None, "", "eng") and not meta.get("original"))
 STRUCT = {"h2", "h3", "spk", "stage", "pb"}
 GROUP_MIN = 250      # characters before a speech or paragraph start may open a new block
 GROUP_MAX = 1600     # a block longer than this is split at the next shared number
@@ -401,9 +414,9 @@ def render_page(orig, trans, page_info):
     R = Side("E", rmeta.get("layout", "prose"), rnotes) if two else None
 
     body, toc = [], []
-    cols = [(L, lmeta, f"g {L.layout}", HTML_LANG.get(lmeta.get("language"), "en"))]
+    cols = [(L, lmeta, f"g {L.layout}", html_lang(lmeta.get("language")))]
     if two:
-        cols.append((R, rmeta, f"e {R.layout}", HTML_LANG.get(rmeta.get("language"), "en")))
+        cols.append((R, rmeta, f"e {R.layout}", html_lang(rmeta.get("language"))))
     body.append(front_section(cols, toc))
     for si, sec in enumerate(sections, 1):
         all_left = [e for g in sec["groups"] for lch, _ in g for e in lch]
@@ -416,8 +429,8 @@ def render_page(orig, trans, page_info):
         head = (f'<h2><span class="t">{sec["title"]}</span><span class="r">{html.escape(rng)}</span></h2>'
                 if sec["title"] else "")
         groups = []
-        llang = HTML_LANG.get(lmeta.get("language"), "en")
-        rlang = HTML_LANG.get(rmeta.get("language"), "en")
+        llang = html_lang(lmeta.get("language"))
+        rlang = html_lang(rmeta.get("language"))
         for g in sec["groups"]:
             lcls = f'col g {L.layout}" lang="{llang}'
             lch_html, rch_html = [], []
@@ -470,7 +483,7 @@ def render_compare(orig, ta, tb):
     B = Side("F", sides[1][0].get("layout", "prose"), sides[1][2])
 
     def lang(m):
-        return HTML_LANG.get(m.get("language"), "en")
+        return html_lang(m.get("language"))
 
     body, toc = [], []
     body.append(front_section([(A, sides[0][0], f"e {A.layout}", lang(sides[0][0])),
@@ -519,8 +532,11 @@ def page_html(title, author, work_title, heads, toc, content, has_two, has_app, 
         tools.append('<button type="button" class="tog" id="apptog" aria-pressed="false">Apparatus</button>')
     tools.append('<form class="jump"><label for="jump">Go to</label>'
                  '<input id="jump" autocomplete="off" placeholder="1.150"></form>')
-    tools.append(f'<a class="icon-btn" href="{up}search.html?work={html.escape(work_id)}" '
-                 f'title="Search this text">Search</a>')
+    tools.append(f'<a class="icon-btn search" href="{up}search.html?work={html.escape(work_id)}" '
+                 f'title="Search this text" aria-label="Search this text"><span class="lbl">Search</span>'
+                 f'<svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" '
+                 f'stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/>'
+                 f'<path d="M15.5 15.5 21 21"/></svg></a>')
     tools.append('<button type="button" class="icon-btn" data-settings aria-expanded="false" '
                  'aria-controls="settings" title="Settings (,)">Settings</button>')
     toc_html = (f'<nav class="toc"><details open><summary>Contents</summary><ol>{"".join(toc)}</ol>'
@@ -564,24 +580,6 @@ def edition_head(meta, others, current, kind):
             for m, href in others)
         return f'<div><b>{lang}</b> <select class="pick" aria-label="{kind}">{opts}</select></div>'
     return f"<div><b>{lang}</b> {html.escape(name)}</div>"
-
-
-def collect(lib_dir, edits=None, include_private=False):
-    """library/private/ holds texts that may not be published (in copyright): read only for
-    a build on this computer (build --private), never for one that is deployed."""
-    works = defaultdict(list)
-    for p in sorted(lib_dir.rglob("*.md")):
-        if p.name.startswith(("_", ".")) or p.name.upper() == "README.MD":
-            continue
-        if not include_private and p.relative_to(lib_dir).parts[0] == "private":
-            continue
-        meta, events, notes = library.parse(p, edits)
-        if not meta.get("work"):
-            continue
-        meta.setdefault("id", p.stem)
-        meta["own"] = "own" in p.relative_to(lib_dir).parts[:1]
-        works[meta["work"]].append((meta, events, notes))
-    return works
 
 
 # ---- groups for authors with many works (catalog/groups.tsv) ----------------------
@@ -645,132 +643,325 @@ def write_search_data(site, wid, author, title, parts):
 
 
 EDITS = None          # the edit rules used by the last build (for reporting unmatched ones)
+STATE_DIR = ROOT / ".buildcache"
+GLOBAL_ASSETS = ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "search.js",
+                 "beacon.jpg", "beacon-tall.jpg")
 
 
-def build(lib_dir, site, catalog=None, shelf_ids=(), include_private=False):
-    # start clean so removed works leave no pages behind; the dictionary is kept (slow to rebuild)
-    site.mkdir(parents=True, exist_ok=True)
-    for child in site.iterdir():
-        if child.name == "dict":
+# ---- what is in the library, read cheaply ------------------------------------------------------
+def fingerprint():
+    """Changes whenever the code that makes the pages changes: then every page is made again."""
+    h = hashlib.sha1()
+    for n in ("build.py", "library.py", "edits.py"):
+        h.update((Path(__file__).parent / n).read_bytes())
+    return h.hexdigest()[:16]
+
+
+def read_header(path):
+    """(front matter as a dict, sha1 of the file) without parsing the text."""
+    raw = path.read_bytes()
+    head = raw[:20000].decode("utf-8", "replace")
+    if head.startswith("---") and head.find("\n---", 3) < 0 and len(raw) > 20000:
+        head = raw.decode("utf-8", "replace")
+    meta = {}
+    if head.startswith("---"):
+        end = head.find("\n---", 3)
+        for line in unicodedata.normalize("NFC", head[3:end]).strip().splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                meta[k.strip()] = v.strip()
+    return meta, hashlib.sha1(raw).hexdigest()
+
+
+def scan(lib_dir, include_private=False):
+    """works[work id] -> the files that make it up, with their front matter and a digest. library/private/ holds
+    texts that may not be published (in copyright): they are only seen by the local pass."""
+    works = defaultdict(list)
+    for p in sorted(lib_dir.rglob("*.md")):
+        if p.name.startswith(("_", ".")) or p.name.upper() == "README.MD":
             continue
-        shutil.rmtree(child) if child.is_dir() else child.unlink()
-    for name in ("style.css", "settings.js", "reader.js", "dict.js", "library.js", "local.js", "catalog.js",
-                 "search.js", "beacon.jpg", "beacon-tall.jpg"):
-        if (ASSETS / name).exists():
-            shutil.copy(ASSETS / name, site / name)
-    shutil.copytree(ASSETS / "fonts", site / "fonts", dirs_exist_ok=True)
+        top = p.relative_to(lib_dir).parts[0]
+        if top == "private" and not include_private:
+            continue
+        meta, digest = read_header(p)
+        if not meta.get("work"):
+            continue
+        meta.setdefault("id", p.stem)
+        meta["own"] = top == "own"
+        works[meta["work"]].append({"path": p, "rel": p.relative_to(lib_dir).as_posix(), "meta": meta,
+                                    "sha": digest, "private": top == "private"})
+    return works
 
-    rules = load_groups(ROOT / "catalog" / "groups.tsv")
-    global EDITS
-    EDITS = text_edits.Rules(lib_dir / "edits.tsv")
-    works = collect(lib_dir, EDITS.apply, include_private)
-    if include_private and (lib_dir / "private").is_dir():
-        # deploy.ps1 refuses to upload a site with this marker
-        (site / "_private").write_text("built with library/private: do not deploy\n", encoding="utf-8")
-    index_entries, report, used = [], [], set()
-    shelf_map = {}
+
+def split_docs(docs):
+    """(originals, translations) of a work's files, as the page builder orders them."""
+    originals = sorted([d for d in docs if is_original(d["meta"])], key=lambda d: d["meta"]["id"])
+    translations = sorted([d for d in docs if not is_original(d["meta"])], key=lambda d: d["meta"]["id"])
+    if not originals:            # a translation alone is shown as the main text
+        originals, translations = translations[:1], translations[1:]
+    return originals, translations
+
+
+def plan_works(works, bases=None):
+    """[(work id, files, page name, author, title)] in build order; page names are unique per author.
+    `bases` pins the page name of works already built elsewhere (the local pass reuses the public names)."""
+    plan, used = [], set()
     for wid, docs in sorted(works.items()):
-        originals = sorted([d for d in docs if d[0].get("language") in ORIGINAL], key=lambda d: d[0]["id"])
-        translations = sorted([d for d in docs if d[0].get("language") not in ORIGINAL], key=lambda d: d[0]["id"])
-        if not originals:            # a translation alone is shown as the main text
-            originals, translations = translations[:1], translations[1:]
-        m0 = originals[0][0]
+        originals, _ = split_docs(docs)
+        m0 = originals[0]["meta"]
         author, title = m0.get("author", ""), m0.get("title", wid)
-        base = slug(title)
-        if f"{slug(author)}/{base}" in used:
+        base = (bases or {}).get(wid) or slug(title)
+        if not (bases or {}).get(wid) and f"{slug(author)}/{base}" in used:
             base = f"{slug(title)}-{slug(wid)}"
         used.add(f"{slug(author)}/{base}")
+        plan.append((wid, docs, base, author, title))
+    return plan
 
-        hrefs = {}
-        compare = {}            # (a, b) -> the first original between translations a and b
-        if len(translations) >= 2:
-            for a in range(len(translations)):
-                for b in range(len(translations)):
-                    if a != b:
-                        compare[(a, b)] = f"{base}.compare-{a}-{b}.html"
-        for oi, o in enumerate(originals):
-            for ti, t in enumerate(translations or [None]):
-                suffix = "" if oi == 0 and ti == 0 else f".{oi}-{ti}"
-                hrefs[(oi, ti)] = f"{base}{suffix}.html"
-        search_parts = []
-        for oi, o in enumerate(originals):
-            for ti, t in enumerate(translations or [None]):
-                content, toc, stats, has_app, final = render_page(o, t, None)
-                href = hrefs[(oi, ti)]
-                lhead = edition_head(o[0], [(x[0], hrefs[(i, ti)]) for i, x in enumerate(originals)],
-                                     href, "Original edition")
-                rhead = edition_head(t[0], [(x[0], hrefs[(oi, i)]) for i, x in enumerate(translations)],
-                                     href, "Translation") if t else ""
-                cmp_link = ""
-                if compare:
-                    other = next(i for i in range(len(translations)) if i != ti)
-                    cmp_link = (f'<a class="icon-btn" href="{compare[(ti, other)]}" '
-                                f'title="Two translations either side of the original">Compare</a>')
-                page = page_html(f"{title} — {author}", author, title, lhead + rhead, toc, content,
-                                 t is not None, has_app, f"{slug(author)}/{href}", wid,
-                                 m0.get("language", ""), extra_tools=cmp_link,
-                                 sources=(o[0]["id"], t[0]["id"] if t else ""))
-                out = site / slug(author) / href
-                out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(page, encoding="utf-8")
-                if t is not None:
-                    tk = sum(1 for e in t[1] if key_of(e))
-                    report.append((wid, o[0]["id"], t[0]["id"], stats["shared"], stats["candidates"], tk,
-                                   stats["approx"]))
-                # search: the first original once, and each translation on its own page
-                page_href = f"{slug(author)}/{href}"
-                if ti == 0:
-                    search_parts.append({"href": page_href, "side": "L", "lang": o[0].get("language", ""),
-                                         "ed": o[0].get("edition") or o[0].get("label", ""),
-                                         "segs": segments(final[0])})
-                if oi == 0 and t is not None:
-                    search_parts.append({"href": page_href, "side": "E", "lang": t[0].get("language", ""),
-                                         "ed": t[0].get("edition") or t[0].get("label", ""),
-                                         "segs": segments(final[1])})
-        for (a, b), href in compare.items():
-            content, toc, has_app = render_compare(originals[0], translations[a], translations[b])
-            ahead = edition_head(translations[a][0], [(x[0], compare.get((i, b), href))
-                                                      for i, x in enumerate(translations) if i != b],
-                                 href, "Left translation")
-            mhead = edition_head(originals[0][0], [], href, "Original edition")
-            bhead = edition_head(translations[b][0], [(x[0], compare.get((a, i), href))
-                                                      for i, x in enumerate(translations) if i != a],
-                                 href, "Right translation")
-            back = (f'<a class="icon-btn" href="{hrefs[(0, a)]}" title="Back to one translation">'
-                    f'One translation</a><a class="icon-btn" href="{compare[(b, a)]}" '
-                    f'title="Swap the two translations">Swap sides</a>')
-            page = page_html(f"{title} — {author} (compare)", author, title, ahead + mhead + bhead, toc,
-                             content, True, has_app, f"{slug(author)}/{href}", wid, m0.get("language", ""),
-                             extra_tools=back, heads_cls="heads three",
-                             sources=(originals[0][0]["id"], translations[a][0]["id"], translations[b][0]["id"]))
-            (site / slug(author) / href).write_text(page, encoding="utf-8")
-        write_search_data(site, wid, author, title, search_parts)
-        author_id = wid.split(".")[0] if not m0.get("own") else slug(author)
-        desc = m0.get("description", "")
-        index_entries.append({
-            "work": wid, "author": author, "author_id": author_id, "title": title,
-            "label": m0.get("label", ""), "href": f"{slug(author)}/{hrefs[(0, 0)]}",
-            "translations": [d[0].get("edition") or d[0].get("label", "") for d in translations],
-            "lang": m0.get("language", ""), "orig": m0.get("original") or m0.get("language", ""),
-            "own": bool(m0.get("own")),
-            "group": group_of(rules, author_id, title, desc),
-            "search": f"search/{slug(wid)}.js",
-        })
-        shelf_map[wid] = f"{slug(author)}/{hrefs[(0, 0)]}"
+
+def work_key(fp, wid, base, docs):
+    h = hashlib.sha1()
+    for part in (fp, wid, base):
+        h.update(part.encode("utf-8"))
+    for d in sorted(docs, key=lambda d: d["rel"]):
+        h.update(d["rel"].encode("utf-8"))
+        h.update(d["sha"].encode("ascii"))
+        for r in EDITS.for_id(d["meta"]["id"]):
+            h.update(repr(r).encode("utf-8"))
+    return h.hexdigest()
+
+
+# ---- one work -> its pages, search data, index entry -------------------------------------------------------
+def render_work(site, wid, docs, base):
+    """Write every page of one work under `site`. Returns what the site needs to remember about it."""
+    before = set(EDITS.used)
+    parsed = []
+    for d in docs:
+        meta, events, notes = library.parse(d["path"], EDITS.apply)
+        meta.setdefault("id", d["path"].stem)
+        meta["own"] = d["meta"]["own"]
+        parsed.append((meta, events, notes))
+    originals = sorted([d for d in parsed if is_original(d[0])], key=lambda d: d[0]["id"])
+    translations = sorted([d for d in parsed if not is_original(d[0])], key=lambda d: d[0]["id"])
+    if not originals:
+        originals, translations = translations[:1], translations[1:]
+    m0 = originals[0][0]
+    author, title = m0.get("author", ""), m0.get("title", wid)
+    files, report = [], []
+
+    def write(rel, text):
+        out = site / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        files.append(rel)
+
+    hrefs = {}
+    compare = {}            # (a, b) -> the first original between translations a and b
+    if len(translations) >= 2:
+        for a in range(len(translations)):
+            for b in range(len(translations)):
+                if a != b:
+                    compare[(a, b)] = f"{base}.compare-{a}-{b}.html"
+    for oi, o in enumerate(originals):
+        for ti, t in enumerate(translations or [None]):
+            suffix = "" if oi == 0 and ti == 0 else f".{oi}-{ti}"
+            hrefs[(oi, ti)] = f"{base}{suffix}.html"
+    search_parts = []
+    for oi, o in enumerate(originals):
+        for ti, t in enumerate(translations or [None]):
+            content, toc, stats, has_app, final = render_page(o, t, None)
+            href = hrefs[(oi, ti)]
+            lhead = edition_head(o[0], [(x[0], hrefs[(i, ti)]) for i, x in enumerate(originals)],
+                                 href, "Original edition")
+            rhead = edition_head(t[0], [(x[0], hrefs[(oi, i)]) for i, x in enumerate(translations)],
+                                 href, "Translation") if t else ""
+            cmp_link = ""
+            if compare:
+                other = next(i for i in range(len(translations)) if i != ti)
+                cmp_link = (f'<a class="icon-btn" href="{compare[(ti, other)]}" '
+                            f'title="Two translations either side of the original">Compare</a>')
+            page = page_html(f"{title} — {author}", author, title, lhead + rhead, toc, content,
+                             t is not None, has_app, f"{slug(author)}/{href}", wid,
+                             m0.get("language", ""), extra_tools=cmp_link,
+                             sources=(o[0]["id"], t[0]["id"] if t else ""))
+            write(f"{slug(author)}/{href}", page)
+            if t is not None:
+                tk = sum(1 for e in t[1] if key_of(e))
+                report.append([wid, o[0]["id"], t[0]["id"], stats["shared"], stats["candidates"], tk,
+                               stats["approx"]])
+            # search: the first original once, and each translation on its own page
+            page_href = f"{slug(author)}/{href}"
+            if ti == 0:
+                search_parts.append({"href": page_href, "side": "L", "lang": o[0].get("language", ""),
+                                     "ed": o[0].get("edition") or o[0].get("label", ""),
+                                     "segs": segments(final[0])})
+            if oi == 0 and t is not None:
+                search_parts.append({"href": page_href, "side": "E", "lang": t[0].get("language", ""),
+                                     "ed": t[0].get("edition") or t[0].get("label", ""),
+                                     "segs": segments(final[1])})
+    for (a, b), href in compare.items():
+        content, toc, has_app = render_compare(originals[0], translations[a], translations[b])
+        ahead = edition_head(translations[a][0], [(x[0], compare.get((i, b), href))
+                                                  for i, x in enumerate(translations) if i != b],
+                             href, "Left translation")
+        mhead = edition_head(originals[0][0], [], href, "Original edition")
+        bhead = edition_head(translations[b][0], [(x[0], compare.get((a, i), href))
+                                                  for i, x in enumerate(translations) if i != a],
+                             href, "Right translation")
+        back = (f'<a class="icon-btn" href="{hrefs[(0, a)]}" title="Back to one translation">'
+                f'One translation</a><a class="icon-btn" href="{compare[(b, a)]}" '
+                f'title="Swap the two translations">Swap sides</a>')
+        page = page_html(f"{title} — {author} (compare)", author, title, ahead + mhead + bhead, toc,
+                         content, True, has_app, f"{slug(author)}/{href}", wid, m0.get("language", ""),
+                         extra_tools=back, heads_cls="heads three",
+                         sources=(originals[0][0]["id"], translations[a][0]["id"], translations[b][0]["id"]))
+        write(f"{slug(author)}/{href}", page)
+    payload = {"work": wid, "author": author, "title": title, "parts": search_parts}
+    write(f"search/{slug(wid)}.js", "SearchLoaded(" + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ");\n")
+    entry = {
+        "work": wid, "author": author, "title": title,
+        "label": m0.get("label", ""), "href": f"{slug(author)}/{hrefs[(0, 0)]}",
+        "translations": [d[0].get("edition") or d[0].get("label", "") for d in translations],
+        "lang": m0.get("language", ""), "orig": m0.get("original") or m0.get("language", ""),
+        "own": bool(m0.get("own")),
+        "search": f"search/{slug(wid)}.js",
+    }
+    return {"files": files, "entry": entry, "base": base, "desc": m0.get("description", ""),
+            "shelf": f"{slug(author)}/{hrefs[(0, 0)]}", "report": report,
+            "used_rules": [list(r) for r in EDITS.used - before]}
+
+
+# ---- the persistent site: only works that changed are made again --------------------------------------------
+def load_state(name, fp):
+    try:
+        st = json.loads((STATE_DIR / f"{name}.json").read_text(encoding="utf-8"))
+        return st if st.get("fp") == fp else None
+    except (OSError, ValueError):
+        return None
+
+
+def save_state(name, st):
+    STATE_DIR.mkdir(exist_ok=True)
+    (STATE_DIR / f"{name}.json").write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+
+
+def remove_files(site, files):
+    for rel in files:
+        p = site / rel
+        try:
+            p.unlink()
+            if p.parent != site and not any(p.parent.iterdir()):
+                p.parent.rmdir()
+        except OSError:
+            pass
+
+
+def make_site(site, name, plan, fp, stats, keep=()):
+    """Bring `site` up to date for `plan`; returns {work id: remembered result}. A cold start (no record, or the
+    builder code changed) clears the folder first, except the names in `keep`."""
+    state = load_state(name, fp)
+    site.mkdir(parents=True, exist_ok=True)
+    if state is None:
+        for child in site.iterdir():
+            if child.name not in keep:
+                shutil.rmtree(child) if child.is_dir() else child.unlink()
+        state = {"fp": fp, "works": {}}
+    results, wanted = {}, set()
+    for wid, docs, base, author, title in plan:
+        wanted.add(wid)
+        key = work_key(fp, wid, base, docs)
+        old = state["works"].get(wid)
+        if old and old["key"] == key and all((site / f).exists() for f in old["files"]):
+            for r in old["used_rules"]:
+                EDITS.used.add(tuple(r))
+            results[wid] = old
+            stats["cached"] += 1
+            continue
+        res = render_work(site, wid, docs, base)
+        res["key"] = key
+        if old:
+            remove_files(site, set(old["files"]) - set(res["files"]))
+        state["works"][wid] = res
+        results[wid] = res
+        stats["made"] += 1
+    for wid in [w for w in state["works"] if w not in wanted]:
+        remove_files(site, state["works"][wid]["files"])
+        del state["works"][wid]
+        stats["removed"] += 1
+    save_state(name, state)
+    return results
+
+
+def assemble(results, rules):
+    """The index entries, share map and sync rows for the pages that are on a site."""
+    entries, shelf, report = [], {}, []
+    for wid in sorted(results):
+        r = results[wid]
+        e = dict(r["entry"])
+        author_id = wid.split(".")[0] if not e["own"] else slug(e["author"])
+        e["author_id"] = author_id
+        e["group"] = group_of(rules, author_id, e["title"], r["desc"])
+        entries.append(e)
+        shelf[wid] = r["shelf"]
+        report += [tuple(x) for x in r["report"]]
     # your own texts sit under the same author as the Perseus ones when the names agree
-    ids = {e["author"]: e["author_id"] for e in index_entries if not e["own"]}
-    for e in index_entries:
+    ids = {e["author"]: e["author_id"] for e in entries if not e["own"]}
+    for e in entries:
         if e["own"]:
             e["author_id"] = ids.get(e["author"], e["author_id"])
-    write_landing(site, index_entries)
+    return entries, shelf, report
+
+
+def copy_assets(site, extra=()):
+    site.mkdir(parents=True, exist_ok=True)
+    for name in GLOBAL_ASSETS + tuple(extra):
+        if (ASSETS / name).exists():
+            shutil.copy(ASSETS / name, site / name)
+
+
+def build(lib_dir, site, catalog=None, shelf_ids=(), public=False, local_site=None, stats=None):
+    """The public site (`site`, what gets deployed) and, unless public=True, the local overlay (`local_site`):
+    the catalog, the private texts, and the library and search pages that list them. The edit server serves the
+    overlay first and `site` for everything else. Both are persistent: a page is only made again when the text it
+    comes from, its edit rules, or the page code has changed."""
+    global EDITS
+    stats = stats if stats is not None else {}
+    stats.update({"cached": 0, "made": 0, "removed": 0})
+    fp = fingerprint()
+    rules = load_groups(ROOT / "catalog" / "groups.tsv")
+    EDITS = text_edits.Rules(lib_dir / "edits.tsv")
+
+    # 1. the public site: every work, without library/private
+    public_works = scan(lib_dir, include_private=False)
+    pub = make_site(site, "public", plan_works(public_works), fp, stats, keep=("dict",))
+    copy_assets(site)
+    for stale in ("_local", "_private", "_sync.md", "catalog.html", "catalog.js"):     # from the older layout
+        (site / stale).unlink(missing_ok=True)
+    entries, shelf, report = assemble(pub, rules)
+    write_landing(site, entries)
     write_local_page(site)
-    write_library(site, index_entries)
-    write_catalog(site, catalog, {e["work"] for e in index_entries})
-    write_search_page(site, index_entries)
-    (site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf_map, ensure_ascii=False) + ";\n",
-                                   encoding="utf-8")
-    write_report(site, report)
-    return index_entries, report
+    write_library(site, entries, local=False)
+    write_search_page(site, entries, local=False)
+    (site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf, ensure_ascii=False) + ";\n", encoding="utf-8")
+    if public or local_site is None:
+        return entries, report
+
+    # 2. the local overlay: works that have private files are made again with all their files; the rest is shared
+    all_works = scan(lib_dir, include_private=True)
+    touched = {w: d for w, d in all_works.items() if any(x["private"] for x in d)}
+    bases = {w: r["base"] for w, r in pub.items()}
+    plan = [p for p in plan_works(all_works, bases) if p[0] in touched]
+    loc = make_site(local_site, "local", plan, fp, stats)
+    merged = {w: r for w, r in pub.items() if w not in loc}
+    merged.update(loc)
+    entries, shelf, report = assemble(merged, rules)
+    local_site.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ASSETS / "catalog.js", local_site / "catalog.js")
+    write_library(local_site, entries, local=True)
+    write_search_page(local_site, entries, local=True)
+    write_catalog(local_site, catalog, {e["work"] for e in entries})
+    (local_site / "shelf.js").write_text("window.SHELF = " + json.dumps(shelf, ensure_ascii=False) + ";\n", encoding="utf-8")
+    write_report(local_site, report)
+    return entries, report
 
 
 def html_page(title, body_cls, main, scripts, data_js=""):
@@ -792,29 +983,29 @@ def html_page(title, body_cls, main, scripts, data_js=""):
 """
 
 
-def top_links(current):
-    links = [("index.html", "The Mandate of Fire"), ("library.html", "Library"),
-             ("search.html", "Search texts"), ("catalog.html", "Catalog")]
+LOGO = ('<a class="logo" href="index.html" title="The Mandate of Fire" aria-label="The Mandate of Fire">'
+        '<span class="logo-mark" lang="grc">ΘΠ</span></a>')
+
+
+def top_links(current, local=False):
+    links = [("library.html", "Library"), ("search.html", "Search texts")]
+    if local:
+        links.append(("catalog.html", "Catalog"))
     out = "".join(f'<a href="{h}">{t}</a>' for h, t in links if h != current)
     return (f'<nav class="links">{out}<button type="button" class="icon-btn" data-settings '
             f'aria-expanded="false" aria-controls="settings">Settings</button></nav>')
 
 
-def write_library(site, entries):
+def write_library(site, entries, local=False):
     data = json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
     n = len(entries)
     main = f"""<main class="lib">
-<div class="lib-top"><h1>Library</h1>{top_links("library.html")}</div>
-<p class="count">{n} work{"s" if n != 1 else ""} on the shelf</p>
+<div class="lib-top">{LOGO}<h1>Library</h1>{top_links("library.html", local)}</div>
+<p class="count">{n} work{"s" if n != 1 else ""}</p>
 <section id="continue-wrap" hidden><h3 class="label">Continue reading</h3><div class="continue" id="continue"></div></section>
 <div class="finder"><input type="search" id="find" placeholder="Find a work or author (accents optional)" aria-label="Find a work or author">
 <div class="chips" id="langs" role="group" aria-label="Language">
 <button type="button" data-l="all" aria-pressed="true">All</button><button type="button" data-l="grc" aria-pressed="false">Greek</button><button type="button" data-l="lat" aria-pressed="false">Latin</button></div></div>
-<section class="local" id="local" hidden><h3 class="label">On this device</h3>
-<div class="local-row"><span id="local-status"></span>
-<button type="button" class="icon-btn" id="local-link">Link a folder</button>
-<label class="icon-btn">Add .md files<input type="file" id="local-files" accept=".md,.markdown,.txt,text/markdown" multiple hidden></label></div>
-<p class="local-note">Your own texts, in the <a href="https://github.com/gmleuning/neoperseus/blob/main/SPEC.md">library format</a>, read in this browser only and never uploaded. You can also drop .md files anywhere on this page.</p></section>
 <div class="shelf"><nav class="authors" id="authors" aria-label="Authors"></nav><section class="works" id="works" aria-live="polite"></section></div>
 <noscript><p>The library list needs JavaScript.</p></noscript>
 </main>"""
@@ -867,7 +1058,8 @@ def write_landing(site, entries):
     main = """<main class="landing">
 <div class="art" aria-hidden="true"><picture><source media="(orientation: portrait)" srcset="beacon-tall.jpg"><img src="beacon.jpg" alt=""></picture></div>
 <div class="veil" aria-hidden="true"></div>
-<nav class="land-top"><span class="land-credit">J. M. W. Turner, <i>The Beacon Light</i></span><a href="library.html">Library</a><a href="search.html">Search</a><a href="catalog.html">Catalog</a>
+<p class="land-credit">J. M. W. Turner, <i>The Beacon Light</i></p>
+<nav class="land-top"><a href="library.html">Library</a>
 <button type="button" class="icon-btn" data-settings aria-expanded="false" aria-controls="settings">Settings</button></nav>
 <section class="hero">
 <p class="sub"><span>The Mandate of Fire</span></p>
@@ -878,12 +1070,12 @@ def write_landing(site, entries):
         html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], LANDING_FIT), encoding="utf-8")
 
 
-def write_search_page(site, entries):
+def write_search_page(site, entries, local=False):
     works = [{"work": e["work"], "author": e["author"], "author_id": e["author_id"], "title": e["title"],
               "lang": e["lang"], "search": e["search"]} for e in entries]
     data = json.dumps(works, ensure_ascii=False, separators=(",", ":"))
     main = f"""<main class="lib">
-<div class="lib-top"><h1>Search</h1>{top_links("search.html")}</div>
+<div class="lib-top">{LOGO}<h1>Search</h1>{top_links("search.html", local)}</div>
 <form class="search-form" id="sf">
 <input class="q" id="q" type="search" placeholder="Words or a phrase — accents optional (λογος, arma virumque)" aria-label="Search" autofocus>
 <div class="opts">
@@ -902,29 +1094,54 @@ def write_search_page(site, entries):
         encoding="utf-8")
 
 
-def write_catalog(site, catalog, on_shelf):
-    if not catalog:
-        return
+def catalog_rows(catalog, on_shelf):
+    """One row per work in any public-domain repository we list: Perseus (catalog/catalog.json) and
+    Wikisource pairs (catalog/wikisource.json, made by tools/wikisource_catalog.py).
+    [id, author, title, original title, languages, English editions, on shelf, source]"""
     rows = []
-    for w in catalog["works"]:
+    for w in (catalog or {}).get("works", []):
         langs = sorted({e["lang"] for e in w["editions"]})
         orig = next((e["label"] for e in w["editions"] if e["lang"] in ORIGINAL), "")
-        trans = [tr for tr in (e["description"] for e in w["editions"] if e["lang"] == "eng")]
+        trans = [e["description"] for e in w["editions"] if e["lang"] == "eng"]
         rows.append([w["id"], catalog["authors"].get(w["author"], w["author"]), w["title"], orig,
-                     "+".join(langs), len(trans), 1 if w["id"] in on_shelf else 0])
+                     "+".join(langs), len(trans), 1 if w["id"] in on_shelf else 0, "perseus"])
+    ws = ROOT / "catalog" / "wikisource.json"
+    if ws.exists():
+        for w in json.loads(ws.read_text(encoding="utf-8"))["works"]:
+            work = w["id"].rsplit(".", 1)[0]
+            rows.append([w["id"], "", w["en_title"], w["orig_title"], "eng+" + w["lang"], 1,
+                         1 if work in on_shelf else 0, "wikisource"])
+    return rows
+
+
+SOURCES = [["perseus", "Perseus Digital Library"], ["wikisource", "Wikisource"]]
+
+
+def write_catalog(site, catalog, on_shelf):
+    rows = catalog_rows(catalog, on_shelf)
+    if not rows:
+        return
     data = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     main = f"""<main class="lib wide">
-<div class="lib-top"><h1>Catalog</h1>{top_links("catalog.html")}</div>
-<p class="count">Every work in the Perseus canonical Greek and Latin repositories. To add one to your shelf, run the
-command shown next to it.</p>
+<div class="lib-top">{LOGO}<h1 class="long">Works in public domain repositories</h1>{top_links("catalog.html", True)}</div>
+<p class="count">Perseus and Wikisource so far; more repositories can be added to this list. Press Add and the work is
+downloaded into your library. A Wikisource row adds the original; use <i>translations</i> to find the English page you want, then
+<i>+ translation</i> and paste its address. (Add works only when this page is served by <code>python perseus.py edit</code>;
+this catalog is not part of the public site.)</p>
+<section class="local" id="local" hidden><h3 class="label">On this device</h3>
+<div class="local-row"><span id="local-status"></span>
+<button type="button" class="icon-btn" id="local-link">Link a folder</button>
+<label class="icon-btn">Add .md files<input type="file" id="local-files" accept=".md,.markdown,.txt,text/markdown" multiple hidden></label></div>
+<p class="local-note">Your own texts, in the <a href="https://github.com/gmleuning/neoperseus/blob/main/SPEC.md">library format</a>, read in this browser only and never uploaded. You can also drop .md files anywhere on this page.</p></section>
 <div class="filters"><input id="q" type="search" placeholder="Search author or title (accents optional)" autofocus>
+<label>Repository <select id="src"><option value="">All</option>{"".join(f'<option value="{k}">{html.escape(v)}</option>' for k, v in SOURCES)}</select></label>
 <label><input type="checkbox" id="eng"> with English</label>
-<label><input type="checkbox" id="shelf"> on my shelf</label></div>
+<label><input type="checkbox" id="shelf"> hide works on my shelf</label></div>
 <p class="count" id="n"></p>
-<table class="cat"><thead><tr><th>Author</th><th>Title</th><th>Languages</th><th>To add</th></tr></thead>
+<table class="cat"><thead><tr><th>Author</th><th>Title</th><th>Languages</th><th>Repository</th><th></th></tr></thead>
 <tbody id="rows"></tbody></table>
 </main>"""
-    page = html_page("Catalog", "index", main, ["catalog.js"], f"<script>window.CATALOG = {data};</script>")
+    page = html_page("Catalog", "index", main, ["catalog.js", "local.js"], f"<script>window.CATALOG = {data};</script>")
     (site / "catalog.html").write_text(page, encoding="utf-8")
 
 

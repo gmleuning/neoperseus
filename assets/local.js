@@ -568,7 +568,13 @@
   // ---- library page: the "On this device" bar --------------------------------------------------
   function libraryPage() {
     var bar = document.getElementById("local");
-    if (!bar || !window.indexedDB) return;
+    if (!window.indexedDB) return;
+    if (!bar) {          // the library page: texts kept on this device simply join the list
+      if (window.LibraryPage) store.all().then(function (files) {
+        window.LibraryPage.setLocal(entries(files, window.LIBRARY));
+      }).catch(function () {});
+      return;
+    }
     var status = document.getElementById("local-status");
     var linkBtn = document.getElementById("local-link");
     var input = document.getElementById("local-files");
