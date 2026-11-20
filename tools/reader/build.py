@@ -1057,6 +1057,17 @@ LANDING_FIT = """<script>
 </script>"""
 
 
+# a click anywhere on the landing page opens the library (the Settings button and its drawer still work)
+LANDING_GO = """<script>
+document.addEventListener("click", function (e) {
+  if (e.target.closest("a, button, input, select, label, .drawer")) return;
+  var S = window.ReaderSettings;
+  if (document.querySelector(".drawer.open")) { if (S && S.close) S.close(); return; }
+  location.href = "library.html";
+});
+</script>"""
+
+
 def write_landing(site, entries):
     main = """<main class="landing">
 <div class="art" aria-hidden="true"><picture><source media="(orientation: portrait)" srcset="beacon-tall.jpg"><img src="beacon.jpg" alt=""></picture></div>
@@ -1070,7 +1081,7 @@ def write_landing(site, entries):
 </section>
 </main>"""
     (site / "index.html").write_text(
-        html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], LANDING_FIT), encoding="utf-8")
+        html_page("Θεσμὸς Πυρός — The Mandate of Fire", "landing", main, [], LANDING_FIT + LANDING_GO), encoding="utf-8")
 
 
 def write_search_page(site, entries, local=False):
