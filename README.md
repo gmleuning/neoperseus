@@ -60,7 +60,7 @@ in it is needed to build.)
   citation keys (line numbers, Stephanus pages, chapters) so passages face each other. Works with two
   English translations get a Compare view. Pairs that do not match perfectly still read: unmatched text
   rides along in the nearest block, and each build reports how well every pair matched.
-- **Click any word.** Greek and Latin words open LSJ or Lewis & Short, with the parse for Greek. English
+- **Double-click any word.** Greek and Latin words open LSJ or Lewis & Short, with the parse for Greek. English
   words open Wiktionary: senses, IPA, recordings and the etymology as a timeline.
 - **Library, search, settings.** Authors and works with continue-reading; full-text search (accents,
   breathings and final sigma ignored; all inflected forms of a Greek word); colour schemes, fonts, sizes,
